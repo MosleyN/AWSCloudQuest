@@ -1,0 +1,2967 @@
+// ── Block 1 ──────────────────────────────────────────────────
+(function(){
+  var manifest = {
+    name: "AWS Cloud Quest — Dungeon of Certifications",
+    short_name: "Cloud Quest",
+    description: "Master AWS certifications through dungeon adventure",
+    start_url: ".",
+    display: "standalone",
+    orientation: "portrait",
+    background_color: "#1a0e28",
+    theme_color: "#1a0e28",
+    icons: [{
+      src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='80' fill='%231a0e28'/%3E%3Ctext x='256' y='360' font-size='320' text-anchor='middle'%3E%E2%9A%94%EF%B8%8F%3C/text%3E%3C/svg%3E",
+      sizes: "512x512", type: "image/svg+xml", purpose: "any maskable"
+    }]
+  };
+  var blob = new Blob([JSON.stringify(manifest)], {type:'application/manifest+json'});
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement('link');
+  link.rel = 'manifest'; link.href = url;
+  document.head.appendChild(link);
+})();
+
+// ── Block 2 ──────────────────────────────────────────────────
+// Register inline service worker for offline support
+if('serviceWorker' in navigator) {
+  var swCode = `
+const CACHE = 'cloud-quest-v1';
+const OFFLINE_URLS = [
+  // The app is a single HTML file — cache everything it fetches
+];
+self.addEventListener('install', e => {
+  self.skipWaiting();
+});
+self.addEventListener('activate', e => {
+  e.waitUntil(clients.claim());
+});
+self.addEventListener('fetch', e => {
+  // Network-first for Google Fonts / CDN, cache-first for same-origin
+  const url = new URL(e.request.url);
+  if(url.origin === location.origin) {
+    e.respondWith(
+      caches.open(CACHE).then(cache =>
+        cache.match(e.request).then(cached => {
+          const fresh = fetch(e.request).then(res => {
+            cache.put(e.request, res.clone());
+            return res;
+          });
+          return cached || fresh;
+        })
+      )
+    );
+  }
+});
+`;
+  var blob = new Blob([swCode], {type: 'application/javascript'});
+  var swUrl = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(swUrl).catch(function(){});
+}
+
+// ── Block 3 ──────────────────────────────────────────────────
+var TavernMusic=(function(){
+  var ctx=null,nodes=[],playing=false,vol=0.14,muted=false,mTimeout=null;
+  function init(){try{ctx=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}}
+  function note(freq,start,dur,v,type){
+    if(!ctx||muted)return;
+    var o=ctx.createOscillator(),g=ctx.createGain();
+    o.type=type||'triangle';o.frequency.value=freq;
+    var t=ctx.currentTime+start;
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+0.05);
+    g.gain.linearRampToValueAtTime(v*0.5,t+dur*0.5);g.gain.linearRampToValueAtTime(0,t+dur);
+    o.connect(g);g.connect(ctx.destination);o.start(t);o.stop(t+dur+0.1);nodes.push(o);
+  }
+  // D-Dorian medieval lute melody
+  var MEL=[[293.66,0,0.35],[329.63,0.4,0.35],[369.99,0.8,0.35],[440,1.2,0.55],[392,1.8,0.35],
+    [349.23,2.2,0.35],[329.63,2.6,0.35],[293.66,3.0,0.55],[261.63,3.6,0.35],[293.66,4.0,0.35],
+    [329.63,4.4,0.35],[369.99,4.8,0.35],[440,5.2,0.55],[493.88,5.8,0.35],[440,6.2,0.35],
+    [392,6.6,0.55],[349.23,7.2,0.35],[329.63,7.6,0.35],[293.66,8.0,0.75]];
+  var BASS=[[73.42,0,1.8],[73.42,2.0,1.8],[65.41,4.0,1.8],[73.42,6.0,2.0]];
+  var CHORDS=[[220,0,0.5],[277.18,0,0.5],[329.63,0.05,0.45],[196,4.0,0.5],[246.94,4.0,0.5],[293.66,4.05,0.45]];
+  var PERC=[0,1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0];
+  function phrase(){
+    if(!playing||muted)return;
+    MEL.forEach(function(n){note(n[0],n[1],n[2],vol*0.65,'triangle');});
+    BASS.forEach(function(n){note(n[0],n[1],n[2],vol*0.45,'sine');});
+    CHORDS.forEach(function(n){note(n[0],n[1],n[2],vol*0.2,'triangle');});
+    PERC.forEach(function(t){note(55+Math.random()*10,t,0.07,vol*0.25,'square');});
+    mTimeout=setTimeout(function(){if(playing)phrase();},9200);
+  }
+  function start(){if(!ctx)init();if(!ctx)return;if(ctx.state==='suspended')ctx.resume();playing=true;phrase();}
+  function stop(){playing=false;if(mTimeout)clearTimeout(mTimeout);nodes.forEach(function(n){try{n.stop();}catch(e){}});nodes=[];}
+  function toggle(){muted=!muted;if(muted)stop();else start();return muted;}
+  function isPlaying(){return playing&&!muted;}
+  return{start:start,stop:stop,toggle:toggle,isPlaying:isPlaying};
+})();
+
+var _musicOn=(function(){try{return localStorage.getItem('awsQuestMusic')==='on';}catch(e){return false;}})();
+function toggleMusic(){
+  var b=document.getElementById('music-btn');
+  if(_musicOn){_musicOn=false;TavernMusic.stop();if(b){b.textContent='🔇';b.classList.add('muted');}try{localStorage.setItem('awsQuestMusic','off');}catch(e){}}
+  else{_musicOn=true;TavernMusic.start();if(b){b.textContent='🎵';b.classList.remove('muted');}try{localStorage.setItem('awsQuestMusic','on');}catch(e){}}
+}
+window.toggleMusic=toggleMusic;
+if(_musicOn){var _mb=document.getElementById('music-btn');if(_mb){_mb.textContent='🎵';_mb.classList.remove('muted');}TavernMusic.start();}
+
+// ── Block 5 ──────────────────────────────────────────────────
+(function(){
+  var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  var isStandalone = window.navigator.standalone === true;
+  var dismissed = localStorage.getItem('pwa-dismissed');
+  if(isIOS && !isStandalone && !dismissed){
+    setTimeout(function(){
+      document.getElementById('pwa-banner').style.display = 'block';
+    }, 3000);
+  }
+})();
+
+// ── Block 6 ──────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function() {
+try {
+
+// ═══ CLASS RANK PROGRESSION SYSTEM ═══
+// Each class starts as NOVICE and gains a new rank + perk after each dungeon conquered
+var CLASS_RANKS = {
+  archmage: [
+    {rank:"Novice",tier:"novice",emoji:"🧙",perk:"None yet — your journey begins",statBonus:{},dungeonRequired:0},
+    {rank:"Cloud Apprentice",tier:"apprentice",emoji:"📜",perk:"Tome Mastery — CloudFormation quest XP +20%",statBonus:{INT:5,WIS:3},dungeonRequired:1},
+    {rank:"Realm Architect",tier:"journeyman",emoji:"🏗️",perk:"Blueprint Vision — See all quest rewards before accepting",statBonus:{INT:8,WIS:5},dungeonRequired:2},
+    {rank:"Cloud Sage",tier:"expert",emoji:"✨",perk:"Arcane Recall — Retry boss questions once per dungeon",statBonus:{INT:12,WIS:8,CON:4},dungeonRequired:3},
+    {rank:"Grand Architect",tier:"master",emoji:"🌩️",perk:"Infinite Stack — Boss XP bonus +100",statBonus:{INT:18,WIS:12,CON:8},dungeonRequired:4},
+    {rank:"⚡ Archmage of the Cloud",tier:"legend",emoji:"👑",perk:"Omniscient — All stats +15, Perfect Trial bonus +100 XP",statBonus:{INT:25,WIS:20,DEX:10,CON:15,STR:10,CHA:10},dungeonRequired:5}
+  ],
+  paladin: [
+    {rank:"Novice",tier:"novice",emoji:"⚔️",perk:"None yet — your oath has not yet been sworn",statBonus:{},dungeonRequired:0},
+    {rank:"Shield Bearer",tier:"apprentice",emoji:"🛡️",perk:"Guard — Security questions show one wrong answer eliminated",statBonus:{CON:5,WIS:3},dungeonRequired:1},
+    {rank:"Guardian Knight",tier:"journeyman",emoji:"🏰",perk:"Holy Aegis — Boss battles start with +1 free point",statBonus:{CON:8,WIS:6,STR:4},dungeonRequired:2},
+    {rank:"High Paladin",tier:"expert",emoji:"✝️",perk:"Divine Intervention — One wrong boss answer forgiven per fight",statBonus:{CON:12,WIS:9,STR:7},dungeonRequired:3},
+    {rank:"Paladin Commander",tier:"master",emoji:"🔱",perk:"Sacred Ground — Compliance quest XP +25%",statBonus:{CON:18,WIS:14,STR:10,INT:6},dungeonRequired:4},
+    {rank:"⚡ Paladin Sovereign",tier:"legend",emoji:"👑",perk:"Unbreakable — All stats +15, immunity to XP penalty on retry",statBonus:{CON:25,WIS:20,STR:15,INT:10,DEX:10,CHA:10},dungeonRequired:5}
+  ],
+  ranger: [
+    {rank:"Novice",tier:"novice",emoji:"🏹",perk:"None yet — your quiver is empty",statBonus:{},dungeonRequired:0},
+    {rank:"Pipeline Scout",tier:"apprentice",emoji:"🔍",perk:"Quick Deploy — CI/CD quest XP +20%",statBonus:{DEX:5,INT:3},dungeonRequired:1},
+    {rank:"Automation Strider",tier:"journeyman",emoji:"⚙️",perk:"Rapid Fire — Trial timer extended by 15 seconds",statBonus:{DEX:8,INT:6,STR:4},dungeonRequired:2},
+    {rank:"DevOps Warden",tier:"expert",emoji:"🌿",perk:"Tracking Shot — Deployment questions show a contextual hint",statBonus:{DEX:12,INT:9,STR:7},dungeonRequired:3},
+    {rank:"Commander of Pipelines",tier:"master",emoji:"🎯",perk:"Eagle Eye — XP from side quests +30%",statBonus:{DEX:18,INT:14,STR:10,WIS:6},dungeonRequired:4},
+    {rank:"⚡ Grand Ranger Lord",tier:"legend",emoji:"👑",perk:"Infinite Quiver — All stats +15, auto-scout new dungeon on open",statBonus:{DEX:25,INT:20,STR:15,WIS:10,CON:10,CHA:10},dungeonRequired:5}
+  ],
+  diviner: [
+    {rank:"Novice",tier:"novice",emoji:"🔮",perk:"None yet — the patterns have not yet revealed themselves",statBonus:{},dungeonRequired:0},
+    {rank:"Data Initiate",tier:"apprentice",emoji:"📊",perk:"Pattern Sense — See question category before answering",statBonus:{INT:5,WIS:4},dungeonRequired:1},
+    {rank:"ML Seer",tier:"journeyman",emoji:"🧿",perk:"Neural Link — Perfect Trial bonus +75 XP",statBonus:{INT:9,WIS:7,CHA:3},dungeonRequired:2},
+    {rank:"Oracle of Bedrock",tier:"expert",emoji:"🌌",perk:"Foresight — Boss questions show the topic domain",statBonus:{INT:13,WIS:10,CHA:6},dungeonRequired:3},
+    {rank:"Grand Oracle",tier:"master",emoji:"⚡",perk:"Omniscience — Wrong answers still award 25% XP",statBonus:{INT:19,WIS:15,CHA:9,DEX:5},dungeonRequired:4},
+    {rank:"⚡ Supreme Diviner",tier:"legend",emoji:"👑",perk:"Singularity — All stats +15, sees all future quest rewards",statBonus:{INT:25,WIS:22,CHA:15,DEX:10,CON:10,STR:5},dungeonRequired:5}
+  ],
+  rogue: [
+    {rank:"Novice",tier:"novice",emoji:"🗡️",perk:"None yet — your daggers are still sheathed",statBonus:{},dungeonRequired:0},
+    {rank:"Code Apprentice",tier:"apprentice",emoji:"💻",perk:"Shadow Step — Serverless/Lambda XP +20%",statBonus:{DEX:5,INT:4},dungeonRequired:1},
+    {rank:"Shadow Coder",tier:"journeyman",emoji:"🌑",perk:"Pickpocket — Side quest XP matches main quest XP this dungeon",statBonus:{DEX:9,INT:7,CHA:3},dungeonRequired:2},
+    {rank:"API Assassin",tier:"expert",emoji:"⚡",perk:"Backstab — First answer in each trial is always correct",statBonus:{DEX:13,INT:10,CHA:6},dungeonRequired:3},
+    {rank:"Master of the SDK",tier:"master",emoji:"🎭",perk:"Vanish — Skip one trial question per dungeon",statBonus:{DEX:19,INT:15,CHA:9,WIS:5},dungeonRequired:4},
+    {rank:"⚡ Grand Shadow Rogue",tier:"legend",emoji:"👑",perk:"Death Strike — All stats +15, boss score required drops to 2/5",statBonus:{DEX:25,INT:20,CHA:15,WIS:10,CON:10,STR:5},dungeonRequired:5}
+  ]
+};
+
+// Get current rank data for a class based on dungeons conquered in the current exam
+function getClassRank(classId, dungeonsConquered){
+  var ranks = CLASS_RANKS[classId];
+  if(!ranks) return CLASS_RANKS.archmage[0];
+  var r = ranks[0];
+  for(var i=0;i<ranks.length;i++){
+    if(dungeonsConquered >= ranks[i].dungeonRequired) r = ranks[i];
+  }
+  return r;
+}
+
+function getDungeonsConquered(){
+  if(!state.examId) return 0;
+  var count = 0;
+  for(var i=1;i<=6;i++){
+    if(state.dungeonsDone && state.dungeonsDone.indexOf(state.examId+'_'+i) !== -1) count++;
+  }
+  return count;
+}
+
+function getNextRank(classId, dungeonsConquered){
+  var ranks = CLASS_RANKS[classId];
+  if(!ranks) return null;
+  for(var i=0;i<ranks.length;i++){
+    if(ranks[i].dungeonRequired > dungeonsConquered) return ranks[i];
+  }
+  return null;
+}
+
+// Show rank-up overlay when a new rank is achieved
+function checkAndShowRankUp(oldConquered, newConquered){
+  if(!state.classId) return;
+  var oldRank = getClassRank(state.classId, oldConquered);
+  var newRank = getClassRank(state.classId, newConquered);
+  if(oldRank.rank !== newRank.rank){
+    showRankUp(newRank);
+  }
+}
+
+var pendingRankUpCallback = null;
+function showRankUp(rankData){
+  document.getElementById('rankup-emoji').textContent = rankData.emoji;
+  document.getElementById('rankup-title').textContent = rankData.rank;
+  var cl = CLASSES[state.classId];
+  document.getElementById('rankup-subtitle').textContent = (cl ? cl.name : '') + ' Rank Achieved!';
+  var _newSpell = spellForZone(state.classId, rankData.dungeonRequired);
+  var _spellHtml = '';
+  if(_newSpell){
+    _spellHtml = '<div style="margin-top:10px;padding:10px 14px;background:rgba(200,80,10,0.12);border:1px solid rgba(200,80,10,0.45);border-radius:8px;">'+
+      '<p class="font-display text-xs mb-1" style="color:var(--fire);letter-spacing:1px;">'+_newSpell.emoji+' SPELL UNLOCKED:</p>'+
+      '<p class="font-body text-sm" style="color:var(--parchment);"><strong>'+_newSpell.name+'</strong> — '+_newSpell.desc+'</p>'+
+      '<p class="font-display text-xs mt-1" style="color:var(--gold);">'+_newSpell.charges+' charges per battle</p>'+
+    '</div>';
+    if(!state.spellCharges) state.spellCharges={};
+      if(!state.gold) state.gold=0;
+      if(!state.shopScrolls) state.shopScrolls={};
+    state.spellCharges[_newSpell.id] = _newSpell.charges;
+  }
+  document.getElementById('rankup-perk').innerHTML =
+    '<p class="font-display text-xs mb-1" style="color:var(--gold);letter-spacing:1px;">⚡ NEW PERK UNLOCKED:</p>' +
+    '<p class="font-body text-sm" style="color:var(--parchment);">' + rankData.perk + '</p>' +
+    _spellHtml;
+  var bonusHtml = '';
+  Object.keys(rankData.statBonus).forEach(function(s){
+    if(rankData.statBonus[s]>0) bonusHtml += '<span class="loot-badge" style="font-size:0.75rem;">'+s+' +'+rankData.statBonus[s]+'</span>';
+  });
+  document.getElementById('rankup-bonus').innerHTML = bonusHtml || '<span class="loot-badge">Legacy Rank</span>';
+  // Apply stat bonuses
+  Object.keys(rankData.statBonus).forEach(function(s){
+    if(state.stats[s]!==undefined) state.stats[s] += rankData.statBonus[s];
+  });
+  saveState();
+  document.getElementById('rankup-overlay').classList.add('active');
+  spawnCelebrationParticles();
+}
+
+function closeRankUp(){
+  document.getElementById('rankup-overlay').classList.remove('active');
+  if(pendingRankUpCallback){ pendingRankUpCallback(); pendingRankUpCallback=null; }
+}
+window.closeRankUp = closeRankUp;
+
+// ═══ HERO TITLE PROGRESSION (kept for backward compat) ═══
+var HERO_TITLES = {
+  archmage:[
+    {min:1,max:15,title:"Cloud Apprentice"},{min:16,max:30,title:"Realm Architect"},
+    {min:31,max:45,title:"Cloud Sage"},{min:46,max:60,title:"Grand Architect"},
+    {min:61,max:80,title:"Master of Infrastructure"},{min:81,max:100,title:"⚡ Archmage of the Cloud"}
+  ],
+  paladin:[
+    {min:1,max:15,title:"Shield Bearer"},{min:16,max:30,title:"Guardian Knight"},
+    {min:31,max:45,title:"High Paladin"},{min:46,max:60,title:"Paladin Commander"},
+    {min:61,max:80,title:"Grand Paladin"},{min:81,max:100,title:"⚡ Paladin Sovereign"}
+  ],
+  ranger:[
+    {min:1,max:15,title:"Pipeline Scout"},{min:16,max:30,title:"Automation Strider"},
+    {min:31,max:45,title:"DevOps Warden"},{min:46,max:60,title:"Commander of Pipelines"},
+    {min:61,max:80,title:"Senior Ranger Lord"},{min:81,max:100,title:"⚡ Grand Ranger Lord"}
+  ],
+  diviner:[
+    {min:1,max:15,title:"Data Initiate"},{min:16,max:30,title:"ML Seer"},
+    {min:31,max:45,title:"Oracle of Bedrock"},{min:46,max:60,title:"Grand Oracle"},
+    {min:61,max:80,title:"Cosmic Diviner"},{min:81,max:100,title:"⚡ Supreme Diviner"}
+  ],
+  rogue:[
+    {min:1,max:15,title:"Code Apprentice"},{min:16,max:30,title:"Shadow Coder"},
+    {min:31,max:45,title:"API Assassin"},{min:46,max:60,title:"Master of the SDK"},
+    {min:61,max:80,title:"Shadow Grandmaster"},{min:81,max:100,title:"⚡ Grand Shadow Rogue"}
+  ]
+};
+
+function getHeroTitle(classId, level) {
+  var titles = HERO_TITLES[classId];
+  if (!titles) return "Adventurer";
+  var lv = Math.min(100, Math.max(1, level));
+  for (var i = 0; i < titles.length; i++) {
+    if (lv >= titles[i].min && lv <= titles[i].max) return titles[i].title;
+  }
+  return titles[titles.length - 1].title;
+}
+
+function getNextRankInfo(classId, level) {
+  var titles = HERO_TITLES[classId];
+  if (!titles) return null;
+  var lv = Math.min(100, Math.max(1, level));
+  for (var i = 0; i < titles.length; i++) {
+    if (lv >= titles[i].min && lv <= titles[i].max) {
+      if (i < titles.length - 1) {
+        return { nextTitle: titles[i + 1].title, levelNeeded: titles[i + 1].min };
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
+function didRankChange(classId, oldLevel, newLevel) {
+  return getHeroTitle(classId, oldLevel) !== getHeroTitle(classId, newLevel);
+}
+
+// ═══ TOAST SYSTEM ═══
+var toastTimeout = null;
+function showToast(message, duration) {
+  duration = duration || 2500;
+  var el = document.getElementById('toast-msg');
+  el.textContent = message;
+  el.classList.add('show');
+  if (toastTimeout) clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(function() {
+    el.classList.remove('show');
+    toastTimeout = null;
+  }, duration);
+}
+
+// ═══ AUTO-SAVE INDICATOR ═══
+var autosaveTimeout = null;
+function flashAutosave() {
+  var el = document.getElementById('autosave-indicator');
+  el.classList.add('show');
+  if (autosaveTimeout) clearTimeout(autosaveTimeout);
+  autosaveTimeout = setTimeout(function() {
+    el.classList.remove('show');
+    autosaveTimeout = null;
+  }, 1500);
+}
+
+// ═══ GAME DATA ═══
+var GEAR = [
+  {id:"cloud_scroll",name:"Scroll of Cloud Lore",emoji:"📜",rarity:"common",stat:"INT +3",bonus:{INT:3}},
+  {id:"linen_tunic",name:"Linen Adventurer's Tunic",emoji:"👘",rarity:"common",stat:"CON +2",bonus:{CON:2}},
+  {id:"vpc_amulet",name:"Amulet of the Virtual Void",emoji:"🔮",rarity:"rare",stat:"WIS +8",bonus:{WIS:8}},
+  {id:"iam_sigil",name:"Sigil of Sacred Permissions",emoji:"🛡️",rarity:"rare",stat:"INT +8",bonus:{INT:8}},
+  {id:"lambda_cloak",name:"Cloak of the Serverless Shadow",emoji:"🌑",rarity:"rare",stat:"DEX +7",bonus:{DEX:7}},
+  {id:"ec2_gauntlets",name:"Gauntlets of Elastic Compute",emoji:"🥊",rarity:"rare",stat:"STR +8",bonus:{STR:8}},
+  {id:"s3_satchel",name:"Bottomless S3 Satchel",emoji:"🎒",rarity:"rare",stat:"CON +6",bonus:{CON:6}},
+  {id:"cf_tome",name:"CloudFormation Grimoire",emoji:"📕",rarity:"epic",stat:"INT +15",bonus:{INT:15}},
+  {id:"eks_plate",name:"EKS Plate Armor",emoji:"⚔️",rarity:"epic",stat:"CON +14",bonus:{CON:14}},
+  {id:"rds_orb",name:"Orb of Relational Mysteries",emoji:"🔮",rarity:"epic",stat:"WIS +13",bonus:{WIS:13}},
+  {id:"pipe_belt",name:"Belt of the Pipeline Keeper",emoji:"⚙️",rarity:"epic",stat:"DEX +14",bonus:{DEX:14}},
+  {id:"kms_key",name:"Key of Ancient Encryption",emoji:"🗝️",rarity:"epic",stat:"WIS +12",bonus:{WIS:12}},
+  {id:"bedrock_staff",name:"Staff of the Bedrock Archmage",emoji:"🪄",rarity:"legendary",stat:"INT +25",bonus:{INT:25}},
+  {id:"cert_crown",name:"Crown of Certification",emoji:"👑",rarity:"legendary",stat:"ALL +10",bonus:{INT:10,WIS:10,DEX:10,CON:10,STR:10,CHA:10}},
+  {id:"devops_blade",name:"Blade of Eternal Deployment",emoji:"⚡",rarity:"legendary",stat:"DEX +22",bonus:{DEX:22}},
+  {id:"security_aegis",name:"Aegis of the Security Paladin",emoji:"🛡️",rarity:"legendary",stat:"CON +25",bonus:{CON:25}},
+  {id:"ml_crown",name:"Neural Crown of the Diviner",emoji:"🧠",rarity:"legendary",stat:"INT +30",bonus:{INT:30}},
+  {id:"practitioner_ring",name:"Ring of the Cloud Practitioner",emoji:"💍",rarity:"legendary",stat:"WIS +20",bonus:{WIS:20}},
+  {id:"network_compass",name:"Compass of Infinite Networks",emoji:"🧭",rarity:"epic",stat:"INT +11",bonus:{INT:11}},
+  {id:"dynamo_hammer",name:"Hammer of DynamoDB",emoji:"🔨",rarity:"rare",stat:"STR +9",bonus:{STR:9}},
+  {id:"sqs_horn",name:"Horn of the Message Queue",emoji:"📯",rarity:"rare",stat:"CHA +8",bonus:{CHA:8}},
+  {id:"cloudwatch_eye",name:"All-Seeing Eye of CloudWatch",emoji:"👁️",rarity:"epic",stat:"WIS +12",bonus:{WIS:12}},
+  {id:"route53_map",name:"Map of the DNS Cartographer",emoji:"🗺️",rarity:"rare",stat:"INT +7",bonus:{INT:7}},
+  {id:"iam_crown",name:"Crown of the IAM Sovereign",emoji:"👑",rarity:"legendary",stat:"WIS +28",bonus:{WIS:28}},
+  {id:"aurora_gem",name:"Gemstone of Aurora's Light",emoji:"💎",rarity:"epic",stat:"CHA +13",bonus:{CHA:13}}
+];
+
+var CLASSES = {
+  archmage:{name:"Archmage",emoji:"🧙",desc:"Cloud Architect",stats:{INT:20,WIS:10,DEX:5,CON:5,STR:5,CHA:5},special:"Arcane Architecture — 15% bonus XP on infrastructure quests",lore:"Masters of grand design, Archmages shape entire cloud realms with a wave of their hand.",weapon:"Staff of CloudFormation"},
+  paladin:{name:"Paladin",emoji:"⚔️",desc:"Security Guardian",stats:{INT:5,WIS:15,DEX:5,CON:20,STR:5,CHA:5},special:"Divine Shield — Security quiz questions show a hint",lore:"Holy warriors bound by oath to protect the realm. No unauthorized access shall pass.",weapon:"IAM Sword of Policy"},
+  ranger:{name:"Ranger",emoji:"🏹",desc:"DevOps Engineer",stats:{INT:10,WIS:5,DEX:20,CON:5,STR:10,CHA:5},special:"Swift Deployment — 15% bonus XP on CI/CD quests",lore:"Swift and precise, Rangers automate the wilderness of deployment pipelines.",weapon:"Bow of CodePipeline"},
+  diviner:{name:"Diviner",emoji:"🔮",desc:"AI/ML Specialist",stats:{INT:25,WIS:10,DEX:5,CON:5,STR:5,CHA:5},special:"Oracle's Sight — See question category before boss battles",lore:"Seers who peer into the patterns of data, Diviners bend machine learning to their will.",weapon:"Crystal Orb of Bedrock"},
+  rogue:{name:"Rogue",emoji:"🗡️",desc:"Developer",stats:{INT:15,WIS:5,DEX:20,CON:5,STR:5,CHA:5},special:"Serverless Shadow — 15% bonus XP on Lambda/API quests",lore:"Quick-fingered coders who slip through APIs undetected.",weapon:"Dagger of the SDK"}
+};
+
+// ═══ STUDY TIPS DATABASE ═══
+var STUDY_TIPS = {};
+STUDY_TIPS['clf_1_m0'] = ["Understand the 3 cloud service models: IaaS (EC2), PaaS (Elastic Beanstalk), SaaS (WorkDocs)","Memorize the 5 characteristics of cloud: on-demand self-service, broad network access, resource pooling, rapid elasticity, measured service","Know the 6 advantages of cloud computing: trade capex for opex, economies of scale, stop guessing capacity, increase speed/agility, eliminate data center costs, go global in minutes","Understand deployment models: Public Cloud, Private Cloud (on-premises), Hybrid Cloud","Review: AWS Cloud Practitioner Essentials Module 1 on AWS Skill Builder"];
+STUDY_TIPS['clf_1_m1'] = ["AWS has 30+ Regions worldwide — each is a separate geographic area","Each Region contains 2–6 Availability Zones (AZs), which are isolated data centers","AWS has 400+ Edge Locations for CloudFront CDN content delivery","Know how to choose a Region: data compliance/sovereignty, latency to users, available services, pricing differences","Understand Local Zones and Wavelength Zones for ultra-low latency use cases"];
+STUDY_TIPS['clf_1_m2'] = ["AWS manages 'Security OF the Cloud' — physical hardware, hypervisor, facilities, global network","Customer manages 'Security IN the Cloud' — OS patching, application code, data, IAM","Shared controls include: patch management, configuration management, awareness & training","For EC2 (IaaS): customer handles more (OS, apps, data); for Lambda (managed): AWS handles more","Study the Shared Responsibility Model diagram — it's heavily tested on the exam"];
+STUDY_TIPS['clf_1_s0'] = ["Three Free Tier types: Always Free (Lambda 1M requests/mo), 12-Month Free (EC2 t2.micro 750 hrs/mo), Trials (SageMaker)","Free Tier starts from the date you create your AWS account","Set up billing alerts to avoid unexpected charges"];
+STUDY_TIPS['clf_1_s1'] = ["The 6 advantages: trade fixed expense for variable, benefit from economies of scale, stop guessing capacity, increase speed and agility, stop spending money running data centers, go global in minutes","Be able to explain each advantage with a real-world example","These map to the AWS Cloud Value Framework pillars"];
+STUDY_TIPS['clf_2_m0'] = ["Know EC2 instance families: T (burstable), M (general), C (compute), R (memory), I (storage), P/G (accelerated/GPU)","Understand the EC2 lifecycle: pending → running → stopping → stopped → shutting-down → terminated","Compare pricing: On-Demand (pay per second), Reserved (1-3yr commitment, up to 72% savings), Spot (up to 90% savings, can be interrupted), Dedicated Hosts (physical server)","Study placement groups: Cluster (low latency), Spread (high availability), Partition (large distributed workloads)","Know how to use EC2 User Data scripts to bootstrap instances on launch"];
+STUDY_TIPS['clf_2_m1'] = ["VPC CIDR blocks define your IP address range (e.g., 10.0.0.0/16 gives 65,536 IPs)","Public subnets have a route to an Internet Gateway; private subnets do not","Internet Gateway enables internet access; NAT Gateway allows private subnet instances to reach the internet","Security Groups are stateful (return traffic auto-allowed); NACLs are stateless (must explicitly allow return traffic)","VPC Flow Logs capture IP traffic information for network monitoring and troubleshooting"];
+STUDY_TIPS['clf_2_m2'] = ["S3 storage classes: Standard, Standard-IA, One Zone-IA, Glacier Instant Retrieval, Glacier Flexible, Glacier Deep Archive, Intelligent-Tiering","Bucket policies are resource-based JSON policies; ACLs are legacy access controls","Versioning protects against accidental deletion — keeps all versions of an object","Lifecycle rules automatically transition objects between storage classes or expire them","Pre-signed URLs grant temporary access to private S3 objects"];
+STUDY_TIPS['clf_2_s0'] = ["IAM users represent people or services; groups organize users; roles provide temporary credentials","Always follow the principle of least privilege — grant only permissions needed","IAM policies are JSON documents with Effect, Action, and Resource statements"];
+STUDY_TIPS['clf_2_s1'] = ["RDS supports MySQL, PostgreSQL, MariaDB, Oracle, SQL Server, and Aurora","Multi-AZ deployments provide automatic failover for high availability","Read replicas improve read performance and can be cross-region"];
+STUDY_TIPS['clf_3_m0'] = ["Users are for individual people; Groups organize users (no nesting); Roles provide temporary access for services or cross-account","Always follow the principle of least privilege — start with zero permissions and add only what's needed","Permission boundaries set the maximum permissions an IAM entity can have","SCPs (Service Control Policies) restrict permissions across an entire AWS Organization","Resource-based policies (e.g., S3 bucket policies) are attached to the resource; Identity-based policies are attached to the user/role","Use IAM conditions for fine-grained access control (e.g., restrict by IP, time, MFA status)"];
+STUDY_TIPS['clf_3_m1'] = ["Encryption at rest: SSE-S3 (AWS-managed keys), SSE-KMS (customer-managed CMKs), SSE-C (customer-provided keys)","Encryption in transit: TLS/SSL for data moving between services and clients","KMS Customer Master Keys (CMKs) can be AWS-managed, customer-managed, or custom key stores","ACM (AWS Certificate Manager) provides free SSL/TLS certificates for AWS services","Amazon Macie uses ML to discover and protect sensitive data like PII in S3"];
+STUDY_TIPS['clf_3_m2'] = ["AWS Config tracks resource configuration changes over time and evaluates compliance rules","Conformance packs are collections of AWS Config rules and remediation actions","Security Hub aggregates findings from GuardDuty, Inspector, Macie, and third-party tools","AWS Artifact provides on-demand access to AWS compliance reports (SOC, PCI, ISO)","GuardDuty is a threat detection service analyzing CloudTrail, VPC Flow Logs, and DNS logs"];
+STUDY_TIPS['clf_3_s0'] = ["AWS Shield Standard: free DDoS protection for all customers (Layer 3/4)","AWS Shield Advanced: paid, with 24/7 DDoS response team and cost protection","AWS WAF protects web apps from common exploits (SQL injection, XSS) at Layer 7"];
+STUDY_TIPS['clf_3_s1'] = ["Enable MFA on the root account and all IAM users with console access","MFA types: virtual (Authenticator app), U2F security key, hardware TOTP token","Hardware MFA via CloudHSM provides FIPS 140-2 Level 3 validated modules"];
+STUDY_TIPS['clf_4_m0'] = ["Cost Explorer visualizes spending patterns over time with filtering and forecasting","AWS Budgets lets you set custom cost, usage, and reservation alerts with thresholds","Cost allocation tags (user-defined and AWS-generated) organize costs by team, project, or environment","Use the Billing Dashboard for a monthly summary; Cost Explorer for deeper analysis","AWS Cost and Usage Report (CUR) provides the most detailed billing data as a CSV"];
+STUDY_TIPS['clf_4_m1'] = ["On-Demand: pay per second/hour, no commitment — best for unpredictable workloads","Reserved Instances: 1 or 3 year commitment, up to 72% savings — best for steady-state","Spot Instances: bid on unused capacity, up to 90% savings, can be interrupted — best for fault-tolerant workloads","Savings Plans: flexible pricing model, commit to $/hour for 1-3 years — applies across EC2, Lambda, Fargate","Dedicated Hosts: physical servers for compliance — most expensive option"];
+STUDY_TIPS['clf_4_m2'] = ["TCO Calculator compares on-premises vs. AWS costs including hardware, facilities, labor","AWS Pricing Calculator estimates monthly costs for specific AWS architectures","Consider hidden on-premises costs: power, cooling, networking, physical security, maintenance staff","Migration can reduce TCO by 30-50% according to AWS case studies","Factor in operational efficiency gains: automation, elasticity, managed services"];
+STUDY_TIPS['clf_4_s0'] = ["Compute Savings Plans: most flexible, apply to EC2, Lambda, Fargate across regions","EC2 Instance Savings Plans: larger discount but locked to instance family and region","Savings Plans provide more flexibility than Reserved Instances with similar savings"];
+STUDY_TIPS['clf_4_s1'] = ["Always Free: Lambda (1M requests/mo), DynamoDB (25 GB), CloudWatch (10 custom metrics)","12-Month Free: EC2 t2.micro (750 hrs/mo), S3 (5 GB), RDS (750 hrs/mo)","Trials: SageMaker, Redshift, GuardDuty — limited-time trials of specific services"];
+STUDY_TIPS['clf_5_m0'] = ["Lambda runs code without provisioning servers — you pay only for compute time consumed","Lambda triggers include: S3 events, API Gateway, DynamoDB Streams, SQS, SNS, CloudWatch Events","Maximum execution time: 15 minutes; memory: up to 10 GB; deployment package: 50 MB zipped / 250 MB unzipped","Event-driven architecture: services react to events rather than polling","Step Functions orchestrate multiple Lambda functions into serverless workflows"];
+STUDY_TIPS['clf_5_m1'] = ["CloudWatch collects metrics, sets alarms, and creates dashboards for AWS resources","CloudWatch Alarms can trigger Auto Scaling, SNS notifications, or EC2 actions","CloudTrail records ALL API calls in your account — essential for auditing and compliance","X-Ray helps trace and debug distributed applications and microservices","VPC Flow Logs capture network traffic information at the VPC, subnet, or ENI level"];
+STUDY_TIPS['clf_5_m2'] = ["RDS: managed relational DB (MySQL, PostgreSQL, Oracle, SQL Server, MariaDB, Aurora)","DynamoDB: serverless NoSQL key-value and document DB with single-digit ms latency","ElastiCache: in-memory caching (Redis or Memcached) for microsecond response times","Redshift: data warehousing for analytics and business intelligence workloads","Choose based on data model: structured → RDS/Aurora, key-value → DynamoDB, analytics → Redshift"];
+STUDY_TIPS['clf_5_s0'] = ["Auto Scaling Groups automatically adjust EC2 instance count based on demand","Launch Templates define instance configuration (AMI, instance type, security groups)","Scaling policies: Target Tracking, Step Scaling, Simple Scaling, Scheduled Scaling","Cooldown periods prevent rapid scaling oscillation"];
+STUDY_TIPS['clf_5_s1'] = ["Route 53 is AWS's DNS service — routes users to applications with low latency","Routing policies: Simple, Weighted, Latency-based, Failover, Geolocation, Multi-Value","Route 53 health checks monitor endpoint availability and trigger failover"];
+STUDY_TIPS['clf_6_m0'] = ["Complete all modules of the AWS Cloud Practitioner Essentials course on Skill Builder","Review the exam guide: 4 domains — Cloud Concepts (24%), Security (30%), Technology (34%), Billing/Pricing (12%)","Know 60+ AWS services at a high level — what each does and when to use it","Focus on understanding concepts over memorizing details — the exam tests comprehension","Take the official practice exam on AWS Skill Builder before scheduling"];
+STUDY_TIPS['clf_6_m1'] = ["Use the official CLF-C02 practice question set from AWS (20 questions, free)","Read every explanation — even for questions you got right","Track your weak areas and review those domains again","Time yourself: 90 minutes for 65 questions on the real exam","Aim for 80%+ on practice tests before scheduling the real exam"];
+STUDY_TIPS['clf_6_m2'] = ["6 Pillars: Operational Excellence, Security, Reliability, Performance Efficiency, Cost Optimization, Sustainability","Operational Excellence: run and monitor systems, continuously improve processes","Security: protect data, systems, and assets through IAM, encryption, and detection","Reliability: recover from failures, scale to meet demand, mitigate disruptions","Cost Optimization: deliver business value at the lowest price point","Use the Well-Architected Tool in the AWS Console to review your workloads"];
+STUDY_TIPS['clf_6_s0'] = ["Create flashcards for all core AWS services — name, purpose, key features","Use spaced repetition (review after 1 day, 3 days, 7 days) for better retention","Focus on services that appear most on the exam: EC2, S3, IAM, VPC, Lambda, CloudWatch"];
+STUDY_TIPS['clf_6_s1'] = ["Join the AWS re:Post community to ask questions and help others","The certification exam community shares study strategies and resources","Teaching others is one of the best ways to solidify your own understanding"];
+
+function getGenericStudyTips(topic, isMain) {
+  if (isMain) {
+    return ["Review the official AWS documentation for " + topic,"Complete hands-on labs on AWS Skill Builder related to " + topic,"Study the exam guide to understand how " + topic + " is weighted","Practice with sample questions focused on " + topic + " scenarios","Build a real-world project applying " + topic + " concepts"];
+  } else {
+    return ["Review supplementary materials for " + topic + " on AWS Docs","Test yourself with practice questions covering " + topic,"Summarize key concepts in your own words for better retention"];
+  }
+}
+
+// ═══ QUEST TRIAL QUESTIONS DATABASE ═══
+var TRIAL_Q = {};
+// Helper
+function tq(q,o,c,e){return {q:q,opts:o,correct:c,explain:e};}
+
+// CLF Dungeon 1
+TRIAL_Q['clf_1_m0'] = [
+  tq("Which of the following is a characteristic of cloud computing?",["Fixed capacity that must be planned years in advance","On-demand self-service with pay-as-you-go pricing","Requires physical access to provision resources","Limited to a single geographic location"],1,"Cloud computing offers on-demand self-service, meaning users can provision resources as needed without human interaction with the provider."),
+  tq("What is the difference between IaaS, PaaS, and SaaS?",["They are all the same thing","IaaS gives raw infrastructure, PaaS adds a platform for development, SaaS delivers complete software","PaaS gives raw infrastructure and IaaS adds a platform","SaaS requires managing the OS"],1,"IaaS (EC2) gives infrastructure, PaaS (Elastic Beanstalk) adds a development platform, and SaaS (Gmail) delivers complete software applications."),
+  tq("Which cloud deployment model keeps all resources on the customer's own infrastructure?",["Public Cloud","Hybrid Cloud","Private Cloud","Community Cloud"],2,"Private cloud keeps all resources on-premises or in a dedicated environment managed by the organization."),
+  tq("The 'measured service' characteristic of cloud computing means:",["Clouds are measured in meters","Resource usage is monitored and billed accordingly","Only large enterprises can use it","Resources are manually allocated"],1,"Measured service means cloud usage is monitored, controlled, and billed based on actual consumption — like a utility."),
+  tq("Which of the following is an advantage of cloud computing over traditional on-premises?",["Higher upfront capital costs","Slower provisioning times","Trade fixed capital expense for variable operational expense","Less global reach"],2,"Cloud computing lets you trade large upfront CapEx (buying servers) for smaller ongoing OpEx (pay-as-you-go), improving cash flow and flexibility.")
+];
+TRIAL_Q['clf_1_m1'] = [
+  tq("What is an AWS Availability Zone?",["A country where AWS operates","One or more discrete data centers with redundant power and networking","A CDN edge location","A single EC2 instance rack"],1,"An AZ is one or more discrete data centers with redundant power, networking, and connectivity within a Region."),
+  tq("How many Availability Zones does a typical AWS Region have?",["Exactly 1","Exactly 10","At least 3","At least 2"],3,"Most AWS Regions have at least 2 AZs, and AWS recommends deploying across at least 2 AZs for high availability."),
+  tq("AWS Edge Locations are primarily used for:",["Running EC2 instances","Storing S3 objects","Caching CloudFront content closer to users","Creating VPCs"],2,"Edge Locations are endpoints used by Amazon CloudFront to cache copies of content closer to end users for lower latency."),
+  tq("When choosing an AWS Region, which factor is typically most important for regulated data?",["The Region with the lowest cost","The Region closest to AWS headquarters","Data sovereignty and compliance requirements","The Region with the most services"],2,"Regulatory and data sovereignty requirements often dictate which Region you must use to keep data within specific legal jurisdictions."),
+  tq("AWS Local Zones extend which of the following to cities closer to end users?",["IAM policies","S3 storage classes","AWS compute, storage, and database services","AWS billing and cost management"],2,"Local Zones place AWS compute, storage, and database services in metropolitan areas to run latency-sensitive workloads closer to end users.")
+];
+TRIAL_Q['clf_1_m2'] = [
+  tq("In the AWS Shared Responsibility Model, who is responsible for patching the guest OS on an EC2 instance?",["AWS","The Customer","AWS Support","The OS vendor"],1,"For EC2 (IaaS), the customer is responsible for the guest OS — including patches, updates, and configuration."),
+  tq("AWS is responsible for 'Security OF the cloud', which includes:",["Customer data encryption","Application-level firewalls","The physical hardware, global network, and virtualization layer","OS patching on EC2 instances"],2,"AWS secures the physical facilities, hardware, networking, and virtualization infrastructure that runs all AWS services."),
+  tq("For a managed service like Amazon RDS, AWS takes on additional responsibility for:",["The data stored in the database","Database engine patching and maintenance","User access control to the database","Application queries"],1,"With managed services like RDS, AWS takes on more responsibility including database engine patches, backups, and hardware maintenance."),
+  tq("Which of the following is a SHARED control between AWS and the customer?",["Physical security of data centers","Hypervisor maintenance","Patch management","Global network infrastructure"],2,"Patch management is shared — AWS patches the infrastructure and managed services, while the customer patches their OS and applications on EC2."),
+  tq("A customer stores sensitive PII data in an S3 bucket. Encrypting that data is the responsibility of:",["AWS automatically","The Customer","AWS Shield","Amazon Macie"],1,"Encrypting data in S3 is the customer's responsibility — AWS provides the tools (SSE-S3, SSE-KMS) but enabling encryption is the customer's choice.")
+];
+TRIAL_Q['clf_1_s0'] = [
+  tq("How many categories of AWS Free Tier exist?",["1","2","3","5"],2,"There are three types: Always Free, 12-Month Free, and Trials."),
+  tq("The AWS Free Tier's 12-month period starts from:",["First EC2 launch","Account creation date","First billing cycle","When you add a payment method"],1,"The 12-month free tier begins from the date you create your AWS account."),
+  tq("Which service is part of the Always Free tier?",["EC2 t2.micro (750 hrs)","Lambda (1M requests/month)","RDS (750 hrs)","S3 (5 GB)"],1,"Lambda offers 1M free requests per month as part of the Always Free tier."),
+  tq("To avoid unexpected charges on the Free Tier, you should:",["Never use any AWS services","Set up billing alerts and monitor usage","Only use services during business hours","Contact AWS Support monthly"],1,"Setting up billing alerts helps you monitor usage and avoid unexpected charges when exceeding Free Tier limits."),
+  tq("Which is a Free Tier trial service?",["EC2","S3","Amazon SageMaker","Lambda"],2,"SageMaker offers a limited-time free trial as part of the AWS Free Tier.")
+];
+TRIAL_Q['clf_1_s1'] = [
+  tq("Which is one of the six advantages of cloud computing?",["Increased capital expenditure","Stop guessing capacity","Reduced global reach","Slower deployment speed"],1,"'Stop guessing capacity' is one of the six advantages — cloud lets you scale on demand."),
+  tq("'Go global in minutes' means:",["AWS ships servers to you overnight","You can deploy applications to multiple AWS Regions quickly","AWS builds data centers in your office","You must wait minutes for each deployment"],1,"Going global in minutes means deploying your application to multiple AWS Regions around the world with just a few clicks."),
+  tq("'Benefit from massive economies of scale' means:",["You buy more servers than needed","AWS aggregates usage from many customers, lowering per-unit costs","You must scale manually","Only large companies benefit from cloud"],1,"AWS aggregates usage from hundreds of thousands of customers, achieving higher economies of scale than any individual company."),
+  tq("Trading fixed expense for variable expense helps businesses by:",["Increasing upfront capital costs","Paying only for what you consume rather than investing in data centers","Making costs harder to predict","Requiring annual commitments"],1,"Variable expense means you pay only for what you use, avoiding large upfront capital investments in hardware."),
+  tq("Which advantage relates to deploying faster and iterating quickly?",["Stop guessing capacity","Increase speed and agility","Benefit from economies of scale","Go global in minutes"],1,"Increasing speed and agility means you can provision resources in minutes rather than weeks, enabling faster experimentation and innovation.")
+];
+// CLF Dungeon 2
+TRIAL_Q['clf_2_m0'] = [
+  tq("Which EC2 instance type is optimized for memory-intensive workloads like large databases?",["Compute Optimized (C family)","Memory Optimized (R/X family)","Storage Optimized (I/D family)","General Purpose (T/M family)"],1,"Memory Optimized instances (R, X, High Memory) provide fast performance for workloads that process large data sets in memory."),
+  tq("What is the EC2 instance state sequence after launch?",["Running → Stopped → Terminated","Pending → Running → Shutting-down → Terminated","Pending → Stopped → Terminated","Running → Rebooting → Terminated"],1,"The EC2 lifecycle goes: Pending → Running → Stopping → Stopped (or Shutting-down → Terminated)."),
+  tq("Which EC2 pricing model provides the largest discount but can be interrupted by AWS?",["On-Demand","Reserved Instances","Spot Instances","Dedicated Hosts"],2,"Spot Instances can offer up to 90% discount but AWS can reclaim them with a 2-minute warning when capacity is needed elsewhere."),
+  tq("An EC2 placement group that spreads instances across different hardware to minimize correlated failures is called:",["Cluster Placement Group","Partition Placement Group","Spread Placement Group","Regional Placement Group"],2,"Spread Placement Groups place instances on distinct underlying hardware to reduce correlated failures — ideal for critical instances."),
+  tq("EC2 User Data scripts run:",["Every time the instance reboots","Only when manually triggered","Once at instance launch by default","Only during AMI creation"],2,"By default, EC2 User Data scripts run once at instance launch. They can be configured to run on every restart if needed.")
+];
+TRIAL_Q['clf_2_m1'] = [
+  tq("What is the default VPC CIDR block AWS creates for your default VPC?",["10.0.0.0/16","172.31.0.0/16","192.168.0.0/16","10.0.0.0/8"],1,"AWS creates a default VPC with a CIDR block of 172.31.0.0/16 in each Region."),
+  tq("What is the difference between a Security Group and a Network ACL?",["Security Groups are stateless; NACLs are stateful","Security Groups operate at the subnet level; NACLs at the instance level","Security Groups are stateful; NACLs are stateless","They are identical in function"],2,"Security Groups are stateful (return traffic automatically allowed); NACLs are stateless (you must explicitly allow inbound and outbound)."),
+  tq("Which component allows instances in a private subnet to initiate outbound internet traffic without being directly reachable from the internet?",["Internet Gateway","NAT Gateway","VPC Peering","Direct Connect"],1,"A NAT Gateway allows instances in private subnets to access the internet for updates, while blocking inbound connections from the internet."),
+  tq("VPC Flow Logs capture information about:",["HTTP request contents","IP traffic going to and from network interfaces in a VPC","CloudTrail API events","EC2 CPU utilization"],1,"VPC Flow Logs capture metadata about IP traffic (source/dest IP, ports, protocol, action) flowing through your VPC network interfaces."),
+  tq("To connect two VPCs so they can communicate privately, you would use:",["Internet Gateway","Direct Connect","VPC Peering","Site-to-Site VPN"],2,"VPC Peering creates a private network connection between two VPCs, allowing traffic to route between them using private IP addresses.")
+];
+TRIAL_Q['clf_2_m2'] = [
+  tq("Which S3 storage class offers the lowest cost for data that is rarely accessed and can tolerate retrieval times of hours?",["S3 Standard","S3 Standard-IA","S3 Glacier Flexible Retrieval","S3 Intelligent-Tiering"],2,"S3 Glacier Flexible Retrieval (formerly Glacier) is ideal for archival data with retrieval times of minutes to hours at very low storage cost."),
+  tq("S3 Versioning allows you to:",["Automatically encrypt all objects","Preserve, retrieve, and restore every version of every object","Replicate objects across regions automatically","Restrict object sizes"],1,"S3 Versioning keeps multiple versions of an object, protecting against accidental deletion and allowing you to restore previous versions."),
+  tq("Which S3 feature automatically moves objects between storage classes based on access patterns?",["S3 Replication","S3 Lifecycle Rules","S3 Intelligent-Tiering","S3 Object Lock"],2,"S3 Intelligent-Tiering automatically moves objects between frequent and infrequent access tiers based on changing access patterns at no retrieval charge."),
+  tq("An S3 pre-signed URL allows:",["Permanent public access to an object","Time-limited access to a private S3 object without requiring AWS credentials","Cross-region replication","Encryption of objects at rest"],1,"Pre-signed URLs grant temporary, time-limited access to private S3 objects — useful for sharing files without making the bucket public."),
+  tq("S3 Object Lock helps organizations meet compliance requirements by:",["Encrypting all objects with KMS","Preventing objects from being deleted or overwritten for a fixed period (WORM)","Automatically replicating to another region","Versioning all objects indefinitely"],1,"S3 Object Lock implements Write Once Read Many (WORM) storage, preventing objects from being deleted or modified for a defined retention period.")
+];
+TRIAL_Q['clf_2_s0'] = [
+  tq("What is the recommended approach when assigning permissions to IAM users?",["Grant full admin access for simplicity","Follow the principle of least privilege","Use root account credentials","Share access keys between team members"],1,"Least privilege means granting only the permissions necessary to perform a specific task."),
+  tq("An IAM Group is used to:",["Organize IAM users and apply permissions collectively","Provide temporary credentials","Log into the AWS Console","Create VPCs"],0,"IAM Groups organize users and let you attach policies that apply to all members of the group."),
+  tq("IAM policies are written in which format?",["YAML","XML","JSON","CSV"],2,"IAM policies are JSON documents containing Effect, Action, and Resource statements."),
+  tq("What is an IAM Role used for?",["Storing passwords securely","Granting temporary security credentials to trusted entities","Creating billing reports","Managing EC2 pricing"],1,"IAM Roles provide temporary credentials for trusted entities like EC2 instances, Lambda functions, or other AWS accounts."),
+  tq("Which IAM feature provides an extra layer of security beyond passwords?",["Access keys","MFA (Multi-Factor Authentication)","Security Groups","NACLs"],1,"MFA adds a second factor of authentication to your AWS account, greatly improving security.")
+];
+TRIAL_Q['clf_2_s1'] = [
+  tq("Amazon RDS supports which of the following database engines?",["MongoDB","DynamoDB","MySQL, PostgreSQL, and Aurora","Cassandra"],2,"RDS supports MySQL, PostgreSQL, MariaDB, Oracle, SQL Server, and Amazon Aurora."),
+  tq("RDS Multi-AZ deployments provide:",["Lower storage costs","Automatic failover to a standby replica","Faster query performance","Cross-region replication"],1,"Multi-AZ creates a synchronous standby replica in another AZ that automatically takes over if the primary fails."),
+  tq("RDS Read Replicas are used to:",["Encrypt data at rest","Improve read performance by offloading read queries","Replace the primary database","Manage IAM policies"],1,"Read replicas handle read traffic, reducing load on the primary database instance."),
+  tq("Which RDS feature automatically backs up your database?",["Manual snapshots only","Automated backups with point-in-time recovery","S3 versioning","CloudTrail"],1,"RDS automated backups provide point-in-time recovery with configurable retention periods."),
+  tq("Amazon Aurora is compatible with which database engines?",["Oracle and SQL Server","MongoDB and Cassandra","MySQL and PostgreSQL","DynamoDB and Redis"],2,"Aurora is AWS's cloud-native database compatible with MySQL and PostgreSQL, offering up to 5x MySQL performance.")
+];
+// CLF Dungeon 3
+TRIAL_Q['clf_3_m0'] = [
+  tq("What is the principle of least privilege?",["Granting all permissions to simplify management","Granting only the minimum permissions needed to perform a task","Using only AWS managed policies","Restricting access to administrators only"],1,"Least privilege means granting only the permissions required to perform specific tasks — no more, no less — to reduce risk."),
+  tq("An IAM Role differs from an IAM User because:",["Roles have permanent credentials","Roles are assumed temporarily and use short-term credentials","Roles can only be used by EC2","Roles cannot have policies attached"],1,"Roles are assumed temporarily by trusted entities (EC2, Lambda, other accounts) and provide short-term credentials — no long-term access keys."),
+  tq("Which IAM policy type sets the maximum permissions for an entire AWS Organization account?",["Identity-based policy","Resource-based policy","Service Control Policy (SCP)","Permission Boundary"],2,"SCPs applied through AWS Organizations set the maximum available permissions for all principals in an account or OU."),
+  tq("IAM Access Analyzer helps you:",["Monitor EC2 performance","Identify resources shared with external entities outside your zone of trust","Rotate IAM access keys automatically","Create IAM policies automatically"],1,"IAM Access Analyzer identifies resources (S3 buckets, IAM roles, KMS keys) accessible from outside your account or organization."),
+  tq("A resource-based policy is attached directly to:",["An IAM user","An IAM group","An AWS resource like an S3 bucket or Lambda function","An AWS Organization"],2,"Resource-based policies are attached directly to resources (e.g., S3 bucket policy, Lambda resource policy) and specify who can access them.")
+];
+TRIAL_Q['clf_3_m1'] = [
+  tq("SSE-KMS encryption uses which type of key?",["Customer-provided keys uploaded via API","AWS Key Management Service managed keys","Self-signed SSL certificates","IAM user passwords"],1,"SSE-KMS uses keys managed through AWS KMS, giving you control over key rotation and access policies."),
+  tq("Encryption in transit is typically implemented using:",["KMS keys","TLS/SSL protocols","S3 bucket policies","IAM roles"],1,"TLS/SSL encrypts data as it moves between clients and AWS services, protecting it from interception."),
+  tq("AWS Certificate Manager (ACM) provides:",["KMS encryption keys","Free SSL/TLS certificates for use with AWS services","IAM policy templates","DDoS protection"],1,"ACM provisions, manages, and deploys free public SSL/TLS certificates for use with AWS services like ELB and CloudFront."),
+  tq("Amazon Macie primarily helps you:",["Monitor EC2 performance","Discover and protect sensitive data like PII in S3","Manage IAM policies","Deploy Lambda functions"],1,"Macie uses machine learning to automatically discover, classify, and protect sensitive data stored in Amazon S3."),
+  tq("Envelope encryption involves:",["Encrypting data directly with the master key","Encrypting a data key with a master key, then using the data key to encrypt data","Using two passwords","SSL certificate chaining"],1,"Envelope encryption uses a data key to encrypt data, then encrypts that data key with a CMK — this is efficient for large data sets.")
+];
+TRIAL_Q['clf_3_m2'] = [
+  tq("AWS Config helps you:",["Deploy applications to EC2","Track resource configuration changes and evaluate compliance","Create VPCs","Monitor Lambda performance"],1,"AWS Config continuously monitors and records your AWS resource configurations and evaluates them against desired configurations."),
+  tq("AWS Security Hub provides:",["A centralized view of security alerts and compliance status","EC2 instance monitoring","S3 storage management","IAM user creation"],0,"Security Hub aggregates security findings from GuardDuty, Inspector, Macie, and third-party tools into a single dashboard."),
+  tq("AWS Artifact provides access to:",["EC2 instance templates","AWS compliance reports and agreements","IAM policy generators","CloudFormation templates"],1,"AWS Artifact provides on-demand access to AWS security and compliance documents such as SOC reports and PCI certifications."),
+  tq("Amazon GuardDuty detects threats by analyzing:",["CloudFormation templates","CloudTrail logs, VPC Flow Logs, and DNS logs","IAM policies","S3 object contents"],1,"GuardDuty is a threat detection service that continuously monitors CloudTrail, VPC Flow Logs, and DNS logs for malicious activity."),
+  tq("Conformance packs in AWS Config are:",["Individual Config rules","Collections of Config rules and remediation actions","IAM policy bundles","CloudFormation stack sets"],1,"Conformance packs bundle multiple Config rules and remediation actions for deployment across an organization.")
+];
+TRIAL_Q['clf_3_s0'] = [
+  tq("AWS Shield Standard provides protection against:",["SQL injection attacks","DDoS attacks at Layer 3/4","Application-level exploits","Data breaches"],1,"Shield Standard provides free, automatic DDoS protection at the network and transport layers for all AWS customers."),
+  tq("AWS WAF operates at which OSI layer?",["Layer 3 (Network)","Layer 4 (Transport)","Layer 7 (Application)","Layer 1 (Physical)"],2,"AWS WAF operates at Layer 7 (Application layer), filtering HTTP/HTTPS requests to protect against web exploits."),
+  tq("AWS Shield Advanced includes:",["Free DDoS protection only","24/7 DDoS response team and cost protection","Only network monitoring","Only firewall rules"],1,"Shield Advanced provides 24/7 access to the AWS DDoS Response Team and financial protection against DDoS-related scaling costs."),
+  tq("WAF rules can block which type of attack?",["Physical access to data centers","SQL injection and cross-site scripting (XSS)","Hardware failure","DNS spoofing"],1,"WAF can filter requests to block common web exploits like SQL injection, XSS, and other OWASP Top 10 vulnerabilities."),
+  tq("Which service provides both DDoS protection and web application firewall capabilities?",["IAM","Using Shield Advanced with WAF together","EC2 Security Groups","VPC NACLs"],1,"Shield Advanced and WAF work together — Shield for DDoS protection and WAF for application-layer filtering.")
+];
+TRIAL_Q['clf_3_s1'] = [
+  tq("MFA stands for:",["Multiple Firewall Access","Multi-Factor Authentication","Managed Federation Architecture","Master File Authority"],1,"MFA (Multi-Factor Authentication) requires two or more verification methods to prove identity."),
+  tq("Which MFA method uses an app on your smartphone?",["Hardware TOTP token","U2F security key","Virtual MFA device (authenticator app)","Biometric scanner"],2,"Virtual MFA uses authenticator apps like Google Authenticator or Authy on your smartphone."),
+  tq("MFA should be enabled on which account first?",["Developer accounts","Read-only accounts","The root account","Service accounts"],2,"The root account has unrestricted access and should be the first account protected with MFA."),
+  tq("A U2F security key provides MFA through:",["A one-time code sent via email","A physical USB device that verifies your identity","A phone call","A secret question"],1,"U2F security keys are physical devices you plug into your computer's USB port for strong second-factor authentication."),
+  tq("CloudHSM provides:",["Software-based encryption","FIPS 140-2 Level 3 validated hardware security modules","Free MFA tokens","IAM policy management"],1,"CloudHSM provides dedicated hardware security modules in the AWS cloud for cryptographic key management.")
+];
+// CLF Dungeon 4
+TRIAL_Q['clf_4_m0'] = [
+  tq("AWS Cost Explorer allows you to:",["Deploy EC2 instances","Visualize and analyze your AWS spending over time","Create IAM users","Configure VPCs"],1,"Cost Explorer provides interactive graphs and filtering to visualize spending patterns and forecast future costs."),
+  tq("AWS Budgets can alert you when:",["An EC2 instance fails","Your costs or usage exceed a threshold you set","A security breach occurs","A Lambda function times out"],1,"AWS Budgets lets you set custom cost, usage, and reservation budgets with alerts at defined thresholds."),
+  tq("Cost allocation tags help organizations:",["Encrypt data","Track and categorize costs by project, team, or environment","Improve EC2 performance","Create VPC subnets"],1,"Cost allocation tags let you label AWS resources and then filter your billing reports to see costs by team, project, or environment."),
+  tq("The AWS Cost and Usage Report (CUR) provides:",["A high-level monthly summary only","The most detailed billing data available as downloadable CSV files","Real-time alerts","IAM policy recommendations"],1,"CUR provides the most comprehensive billing data, including hourly line items for every service and resource used."),
+  tq("Which dashboard gives a quick monthly billing summary?",["CloudWatch Dashboard","AWS Billing Dashboard","IAM Dashboard","EC2 Dashboard"],1,"The AWS Billing Dashboard provides a monthly summary of your charges, with links to more detailed reports.")
+];
+TRIAL_Q['clf_4_m1'] = [
+  tq("Reserved Instances offer savings of up to:",["10%","30%","50%","72%"],3,"Reserved Instances offer up to 72% savings compared to On-Demand pricing with a 1 or 3 year commitment."),
+  tq("Spot Instances are best suited for:",["Mission-critical production databases","Stateless, fault-tolerant workloads that can be interrupted","Applications requiring guaranteed uptime","Real-time payment processing"],1,"Spot Instances offer up to 90% savings but can be interrupted, making them ideal for batch processing and fault-tolerant workloads."),
+  tq("Which pricing model requires no upfront commitment?",["Reserved Instances","Savings Plans","On-Demand","Dedicated Hosts"],2,"On-Demand lets you pay by the second or hour with no upfront commitment or long-term contract."),
+  tq("Savings Plans differ from Reserved Instances by:",["Offering no savings","Providing more flexibility across instance families, regions, and services","Being available only for S3","Requiring a 5-year commitment"],1,"Savings Plans offer flexible pricing — commit to $/hour and save across EC2, Lambda, and Fargate without being locked to specific instance types."),
+  tq("Dedicated Hosts are typically used for:",["Cost savings","Software licensing compliance that requires physical server visibility","Development testing","Temporary workloads"],1,"Dedicated Hosts provide a physical server dedicated to your use, needed for certain license models that require per-socket or per-core visibility.")
+];
+TRIAL_Q['clf_4_m2'] = [
+  tq("TCO stands for:",["Total Cloud Operations","Total Cost of Ownership","Technical Configuration Overview","Transfer Cost Optimization"],1,"TCO (Total Cost of Ownership) includes all costs of running infrastructure: hardware, facilities, labor, power, cooling, and more."),
+  tq("The AWS Pricing Calculator helps you:",["Monitor real-time costs","Estimate monthly costs for specific AWS architectures before deploying","Create IAM policies","Deploy CloudFormation stacks"],1,"The Pricing Calculator lets you model AWS solutions and estimate monthly costs before you start using services."),
+  tq("Hidden on-premises costs include:",["Only hardware purchase price","Power, cooling, networking, physical security, and maintenance staff","EC2 pricing","S3 storage costs"],1,"On-premises TCO includes many hidden costs: power, cooling, physical security, networking equipment, and IT staff for maintenance."),
+  tq("According to AWS case studies, migration can reduce TCO by:",["0-5%","5-10%","30-50%","90-100%"],2,"AWS case studies show that cloud migration can reduce total cost of ownership by 30-50% compared to on-premises infrastructure."),
+  tq("When calculating TCO, operational efficiency gains include:",["Higher hardware costs","Automation, elasticity, and managed services reducing manual effort","More physical servers","Longer deployment times"],1,"Cloud provides operational efficiency through automation, auto-scaling, and managed services that reduce manual work and speed up delivery.")
+];
+TRIAL_Q['clf_4_s0'] = [
+  tq("Compute Savings Plans apply to:",["Only EC2 in one region","EC2, Lambda, and Fargate across all regions","Only S3 storage","Only RDS databases"],1,"Compute Savings Plans are the most flexible, applying savings across EC2, Lambda, and Fargate in any region."),
+  tq("EC2 Instance Savings Plans differ from Compute Savings Plans by:",["Offering smaller discounts","Being locked to a specific instance family and region for larger discounts","Applying only to Lambda","Having no commitment period"],1,"EC2 Instance Savings Plans offer larger discounts but require commitment to a specific instance family in a specific region."),
+  tq("Savings Plans require a commitment of:",["No commitment","6 months","1 or 3 years","5 years"],2,"Savings Plans require a commitment to a consistent amount of usage (measured in $/hour) for a 1 or 3 year term."),
+  tq("Compared to Reserved Instances, Savings Plans offer:",["Less savings and less flexibility","Similar savings with more flexibility","No savings at all","Only annual billing"],1,"Savings Plans provide similar cost savings to Reserved Instances but with greater flexibility across services and instance types."),
+  tq("If your usage exceeds your Savings Plan commitment, the excess is billed at:",["Zero cost","The Savings Plan rate","On-Demand rates","Reserved Instance rates"],2,"Any usage beyond your Savings Plan commitment is charged at regular On-Demand rates.")
+];
+TRIAL_Q['clf_4_s1'] = [
+  tq("Which Free Tier type never expires?",["12-Month Free","Trials","Always Free","All expire after 12 months"],2,"Always Free offers don't expire — services like Lambda (1M requests/month) and DynamoDB (25 GB) remain free indefinitely."),
+  tq("EC2 t2.micro is available free for:",["Forever","12 months from account creation","30 days only","1 year from first launch"],1,"EC2 t2.micro (750 hours/month) is part of the 12-Month Free tier, starting from account creation."),
+  tq("DynamoDB's Always Free tier includes:",["100 GB storage","25 GB storage and 25 provisioned read/write capacity units","Unlimited storage","No free tier"],1,"DynamoDB's Always Free tier includes 25 GB of storage and enough capacity for 200M requests per month."),
+  tq("Free Tier trials for services like SageMaker typically last:",["Forever","12 months","A limited time (varies by service)","1 day"],2,"Trial offers are limited-time introductions to specific services, with duration varying by service (e.g., 2 months for SageMaker)."),
+  tq("To track Free Tier usage and avoid charges, you should:",["Ignore billing completely","Use AWS Budgets with Free Tier usage alerts","Only check annually","Contact support monthly"],1,"AWS Budgets can alert you when your Free Tier usage approaches or exceeds the free limits.")
+];
+// CLF Dungeon 5
+TRIAL_Q['clf_5_m0'] = [
+  tq("AWS Lambda charges you for:",["Provisioned server time","Compute time consumed and number of requests","Reserved capacity","Monthly flat fee"],1,"Lambda pricing is based on the number of requests and the compute time consumed (measured in GB-seconds)."),
+  tq("What is the maximum execution time for a Lambda function?",["5 minutes","10 minutes","15 minutes","60 minutes"],2,"Lambda functions can run for a maximum of 15 minutes (900 seconds) per invocation."),
+  tq("Which service can trigger a Lambda function?",["Only API Gateway","Only S3","S3, API Gateway, DynamoDB Streams, SQS, SNS, and more","Only CloudWatch"],2,"Lambda supports many event sources including S3, API Gateway, DynamoDB Streams, SQS, SNS, CloudWatch Events, and more."),
+  tq("AWS Step Functions are used to:",["Create EC2 instances","Orchestrate multiple Lambda functions into workflows","Manage IAM policies","Store objects in S3"],1,"Step Functions coordinate multiple Lambda functions and AWS services into serverless workflows with visual state machines."),
+  tq("Event-driven architecture means:",["Services run on a fixed schedule only","Services react to events rather than continuously polling","All services are always running","Only manual triggers are used"],1,"Event-driven architecture lets services respond to events (like an S3 upload or API call) rather than continuously polling for changes.")
+];
+TRIAL_Q['clf_5_m1'] = [
+  tq("CloudWatch Alarms can trigger which actions?",["Only email notifications","Auto Scaling actions, SNS notifications, and EC2 actions","Only Lambda functions","Only CloudTrail events"],1,"CloudWatch Alarms can trigger Auto Scaling policies, send SNS notifications, and perform EC2 actions like stop/terminate."),
+  tq("AWS CloudTrail records:",["EC2 CPU metrics","All API calls made in your AWS account","S3 object contents","Lambda function code"],1,"CloudTrail records every API call made in your account, providing an audit trail of all actions taken."),
+  tq("AWS X-Ray helps you:",["Monitor billing costs","Trace and debug distributed applications","Create IAM policies","Deploy containers"],1,"X-Ray traces requests as they flow through your distributed application, helping identify performance bottlenecks and errors."),
+  tq("CloudWatch dashboards display:",["Only EC2 metrics","Custom visualizations of metrics from multiple AWS services","Only billing information","Only network traffic data"],1,"CloudWatch dashboards let you create custom views combining metrics from any AWS service in a single unified display."),
+  tq("VPC Flow Logs capture information at which levels?",["Only VPC level","VPC, subnet, or individual network interface (ENI) level","Only EC2 instance level","Only Region level"],1,"VPC Flow Logs can be enabled at the VPC, subnet, or individual ENI level for flexible network traffic monitoring.")
+];
+TRIAL_Q['clf_5_m2'] = [
+  tq("DynamoDB is best described as:",["A relational SQL database","A serverless NoSQL key-value and document database","A data warehouse","A file storage service"],1,"DynamoDB is a fully managed, serverless NoSQL database providing single-digit millisecond performance at any scale."),
+  tq("Amazon ElastiCache provides:",["Object storage","In-memory caching with Redis or Memcached","Relational database management","Data warehousing"],1,"ElastiCache deploys, runs, and scales popular in-memory data stores (Redis or Memcached) for microsecond response times."),
+  tq("Amazon Redshift is designed for:",["Real-time transaction processing","Analytics and data warehousing workloads","In-memory caching","NoSQL document storage"],1,"Redshift is a fully managed data warehouse service designed for analytics and business intelligence on petabyte-scale data."),
+  tq("For structured data with complex queries and transactions, you should choose:",["DynamoDB","Amazon RDS or Aurora","ElastiCache","S3"],1,"RDS and Aurora are relational databases ideal for structured data with SQL queries, transactions, and ACID compliance."),
+  tq("Which database service provides single-digit millisecond latency at any scale?",["RDS","Redshift","DynamoDB","ElastiCache"],2,"DynamoDB delivers consistent single-digit millisecond performance regardless of scale, with built-in replication.")
+];
+TRIAL_Q['clf_5_s0'] = [
+  tq("Auto Scaling Groups adjust capacity based on:",["Manual intervention only","Demand using scaling policies","Fixed schedules only","IAM policy changes"],1,"Auto Scaling Groups automatically adjust EC2 instance count based on demand using various scaling policies."),
+  tq("A Launch Template defines:",["IAM user permissions","Instance configuration like AMI, instance type, and security groups","VPC CIDR blocks","S3 bucket policies"],1,"Launch Templates specify the instance configuration used by Auto Scaling Groups to launch new instances."),
+  tq("Target Tracking scaling maintains:",["A fixed number of instances","A specific metric at a target value (e.g., CPU at 50%)","Only manual scaling","No scaling at all"],1,"Target Tracking automatically adjusts capacity to keep a chosen metric (like average CPU utilization) at your specified target value."),
+  tq("Cooldown periods in Auto Scaling prevent:",["Instances from launching","Rapid scaling oscillation when metrics fluctuate","All scaling activities","Security group changes"],1,"Cooldown periods prevent Auto Scaling from launching or terminating additional instances before previous activities take effect."),
+  tq("Scheduled Scaling is useful when:",["Traffic patterns are completely unpredictable","You know when traffic will increase (e.g., business hours)","You never need to scale","Only for single instances"],1,"Scheduled Scaling lets you set up scaling actions for predictable load changes, like scaling up during business hours.")
+];
+TRIAL_Q['clf_5_s1'] = [
+  tq("Route 53 is primarily used for:",["Object storage","DNS routing and domain name management","Compute instances","Data warehousing"],1,"Route 53 is AWS's scalable DNS web service that routes end users to applications by translating domain names to IP addresses."),
+  tq("Route 53 Failover routing policy is used for:",["Load balancing across equal servers","Routing traffic to a backup resource when the primary fails","Distributing traffic by geographic location","Random routing"],1,"Failover routing sends traffic to a primary resource and automatically switches to a secondary resource if the primary fails health checks."),
+  tq("Latency-based routing in Route 53:",["Routes to the cheapest region","Routes users to the AWS Region with the lowest latency","Routes alphabetically","Always routes to us-east-1"],1,"Latency-based routing directs users to the AWS Region that provides them with the lowest network latency."),
+  tq("Route 53 health checks:",["Only check DNS records","Monitor endpoint availability and can trigger failover","Only check IAM policies","Monitor S3 bucket sizes"],1,"Route 53 health checks monitor whether endpoints are healthy and can automatically failover to backup resources when they're not."),
+  tq("Weighted routing in Route 53 allows you to:",["Route all traffic to one endpoint","Distribute traffic across multiple resources in proportions you specify","Block specific IP addresses","Encrypt DNS queries"],1,"Weighted routing lets you assign relative weights to resources so you can split traffic — for example, 70/30 between two endpoints.")
+];
+// CLF Dungeon 6
+TRIAL_Q['clf_6_m0'] = [
+  tq("The CLF-C02 exam has how many domains?",["2","4","6","8"],1,"The CLF-C02 exam covers 4 domains: Cloud Concepts (24%), Security (30%), Technology (34%), and Billing/Pricing (12%)."),
+  tq("Which domain has the highest weight on the CLF-C02 exam?",["Cloud Concepts","Security and Compliance","Technology","Billing and Pricing"],2,"Technology has the highest weight at 34% of the exam, covering core AWS services and their use cases."),
+  tq("How many questions are on the CLF-C02 exam?",["25","50","65","100"],2,"The CLF-C02 exam has 65 questions to be completed in 90 minutes."),
+  tq("What score is needed to pass the CLF-C02 exam?",["50%","60%","70% (700/1000)","90%"],2,"A score of 700 out of 1000 is needed to pass the CLF-C02 exam, approximately 70%."),
+  tq("The best preparation strategy for CLF-C02 is:",["Only reading documentation","Understanding concepts, taking practice exams, and hands-on labs","Memorizing every service name","Watching one video the night before"],1,"A combination of concept understanding, official practice exams, and hands-on experience provides the best preparation.")
+];
+TRIAL_Q['clf_6_m1'] = [
+  tq("When reviewing practice exam answers, you should:",["Only read explanations for wrong answers","Read explanations for ALL answers, including ones you got right","Skip explanations entirely","Only focus on questions you guessed on"],1,"Reading all explanations reinforces correct understanding and often reveals nuances you might have missed."),
+  tq("What score should you aim for on practice exams before scheduling the real exam?",["50%","60%","80% or higher","100%"],2,"Consistently scoring 80% or higher on practice exams indicates strong readiness for the actual certification exam."),
+  tq("The CLF-C02 exam time limit is:",["30 minutes","60 minutes","90 minutes","120 minutes"],2,"You have 90 minutes to complete all 65 questions on the CLF-C02 exam."),
+  tq("The official AWS practice question set is available on:",["GitHub only","AWS Skill Builder","YouTube","Stack Overflow"],1,"AWS provides official practice question sets on AWS Skill Builder, including free sets for each certification."),
+  tq("Tracking weak areas after practice exams helps you:",["Waste time on topics you already know","Focus study time on domains where you need improvement","Skip important topics","Avoid taking the real exam"],1,"Identifying weak areas lets you prioritize your study time on the domains where you'll see the most improvement.")
+];
+TRIAL_Q['clf_6_m2'] = [
+  tq("How many pillars does the AWS Well-Architected Framework have?",["4","5","6","8"],2,"The Well-Architected Framework has 6 pillars: Operational Excellence, Security, Reliability, Performance Efficiency, Cost Optimization, and Sustainability."),
+  tq("The Operational Excellence pillar focuses on:",["Minimizing costs","Running and monitoring systems and continuously improving processes","Protecting data and systems","Recovering from failures"],1,"Operational Excellence focuses on operations as code, frequent small changes, anticipating failure, and learning from all events."),
+  tq("The Reliability pillar addresses:",["Cost reduction","The ability to recover from failures and meet demand","Application performance tuning","Identity management"],1,"Reliability ensures a workload performs its function correctly and consistently, including recovery from failures and scaling to meet demand."),
+  tq("The Sustainability pillar was added to help organizations:",["Reduce security risks","Minimize the environmental impact of running cloud workloads","Improve network performance","Lower certification costs"],1,"Sustainability focuses on reducing the environmental impact of cloud workloads through efficient resource use and responsible architecture choices."),
+  tq("The Well-Architected Tool in the AWS Console helps you:",["Deploy applications","Review workloads against Well-Architected best practices","Manage IAM users","Monitor CloudWatch metrics"],1,"The Well-Architected Tool lets you review your workloads against the six pillars and get actionable improvement recommendations.")
+];
+TRIAL_Q['clf_6_s0'] = [
+  tq("Spaced repetition involves reviewing material:",["All at once the night before","At increasing intervals (1 day, 3 days, 7 days)","Only once","Every hour for one day"],1,"Spaced repetition spaces out reviews at increasing intervals, which has been proven to improve long-term memory retention."),
+  tq("Which AWS services appear most frequently on the CLF-C02 exam?",["Only Lambda and S3","EC2, S3, IAM, VPC, Lambda, and CloudWatch","Only database services","Only security services"],1,"EC2, S3, IAM, VPC, Lambda, and CloudWatch are among the most frequently tested services on the Cloud Practitioner exam."),
+  tq("Effective flashcards should include:",["Only the service name","Service name, purpose, and key features","Only pricing information","Only the AWS Region where it's available"],1,"Good flashcards cover the service name, what it does, key features, and common use cases for quick review."),
+  tq("The best time to create flashcards is:",["After passing the exam","As you study each service or concept","Only from other people's flashcard sets","Never — flashcards don't work"],1,"Creating flashcards as you study helps reinforce learning through active recall and forces you to summarize key points."),
+  tq("For AWS service flashcards, you should focus on:",["Memorizing exact API call syntax","Understanding what the service does and when to use it","Learning internal AWS architecture","Pricing down to the cent"],1,"The CLF-C02 tests comprehension — understanding what each service does and when to use it is more important than memorizing technical details.")
+];
+TRIAL_Q['clf_6_s1'] = [
+  tq("AWS re:Post is:",["An email service","A community platform for asking and answering AWS questions","A deployment tool","A database service"],1,"AWS re:Post is a community-driven Q&A platform where AWS users ask questions, share knowledge, and help each other."),
+  tq("Teaching others about AWS concepts helps you because:",["It wastes their time","Explaining concepts deepens your own understanding","It's required for certification","It gives you AWS credits"],1,"Teaching forces you to organize your knowledge and identify gaps — it's one of the most effective learning strategies."),
+  tq("The AWS certification community is useful for:",["Getting exam answers in advance","Sharing study strategies, tips, and encouragement","Bypassing exam requirements","Nothing related to studying"],1,"The certification community provides study strategies, resource recommendations, and moral support from fellow exam takers."),
+  tq("When helping others on AWS forums, you should:",["Share exact exam questions","Explain concepts clearly and point to official documentation","Make up answers that sound good","Ignore questions you know the answer to"],1,"Good community participation means explaining concepts clearly, citing official docs, and helping others understand rather than just memorize."),
+  tq("Joining a study group for AWS certification can help by:",["Allowing you to skip studying","Providing accountability, different perspectives, and peer teaching","Guaranteeing you pass the exam","Replacing official study materials"],1,"Study groups provide accountability, expose you to different perspectives on topics, and enable peer teaching which benefits everyone.")
+];
+
+// ═══ SOA TRIAL QUESTIONS ═══
+TRIAL_Q['soa_1_m0'] = [
+  tq("CloudWatch Composite Alarms evaluate:",["A single metric threshold","The state of multiple other alarms using AND/OR logic","CPU utilization only","Only custom metrics"],1,"Composite Alarms combine multiple alarm states using Boolean logic (AND/OR) to reduce alert noise and create sophisticated monitoring."),
+  tq("CloudWatch Anomaly Detection uses:",["Static thresholds only","Machine learning to create dynamic baselines","Manual configuration for each metric","CloudTrail data"],1,"Anomaly Detection applies ML models to create dynamic thresholds that adapt to natural metric patterns like daily or weekly cycles."),
+  tq("To create a cross-account CloudWatch dashboard, you need:",["Nothing special — it works by default","A monitoring account with cross-account observability enabled","Physical access to all accounts","A dedicated VPC"],1,"Cross-account observability requires setting up a monitoring account and linking source accounts to share metrics, logs, and traces."),
+  tq("CloudWatch metric dimensions are used to:",["Delete metrics","Uniquely identify a metric within a namespace (e.g., InstanceId for EC2)","Create alarms only","Set billing alerts"],1,"Dimensions are name-value pairs that uniquely identify a metric — for example, InstanceId distinguishes metrics between different EC2 instances."),
+  tq("CloudWatch custom metrics allow you to:",["Only monitor AWS services","Publish your own application or business metrics to CloudWatch","Replace CloudTrail","Manage IAM policies"],1,"Custom metrics let you push any application-level or business data into CloudWatch for monitoring, alarming, and dashboarding.")
+];
+TRIAL_Q['soa_1_m1'] = [
+  tq("CloudTrail management events track:",["Data access within resources","API calls that manage AWS resources (create, modify, delete)","Network traffic flow","Application logs"],1,"Management events capture control plane operations like creating EC2 instances, modifying security groups, or changing IAM policies."),
+  tq("CloudTrail Insights detects:",["Normal API usage patterns","Unusual API call volumes or error rates","S3 object contents","Lambda function code"],1,"CloudTrail Insights automatically analyzes management events to identify unusual activity such as spikes in API calls or elevated error rates."),
+  tq("To trigger automated remediation from CloudTrail events, use:",["Manual intervention","Amazon EventBridge rules with Lambda targets","S3 lifecycle policies","IAM password policies"],1,"EventBridge can match specific CloudTrail API events and trigger Lambda functions to automatically remediate issues."),
+  tq("CloudTrail logs should be enabled across:",["Only us-east-1","Only the primary account","All Regions and all accounts in the organization","Only production accounts"],2,"Best practice is to enable CloudTrail across all Regions and all accounts using AWS Organizations for complete audit coverage."),
+  tq("CloudTrail data events track:",["Account-level API calls","Resource-level operations like S3 object reads and Lambda invocations","Only IAM changes","Only EC2 actions"],1,"Data events track resource-level operations like S3 GetObject/PutObject and Lambda Invoke — they capture data plane activity.")
+];
+TRIAL_Q['soa_1_m2'] = [
+  tq("SSM Session Manager provides shell access without:",["Any credentials","Opening port 22 or using bastion hosts","Internet connectivity","IAM permissions"],1,"Session Manager provides secure, audited, browser-based shell access to EC2 instances without requiring SSH, bastion hosts, or opening inbound ports."),
+  tq("SSM Patch Manager automates:",["Application deployments","OS and software patching across EC2 fleets","IAM policy updates","CloudFormation stack updates"],1,"Patch Manager automates the process of patching managed instances with security and other updates across your EC2 fleet."),
+  tq("SSM Parameter Store is used for:",["Storing EC2 AMIs","Securely storing configuration data and secrets as key-value pairs","Creating VPCs","Managing Route 53 records"],1,"Parameter Store provides centralized, secure storage for configuration data and secrets like database strings, passwords, and license keys."),
+  tq("SSM Automation runbooks enable:",["Manual-only remediation","Self-healing operations through automated multi-step workflows","Only EC2 instance monitoring","Only S3 management"],1,"Automation runbooks define multi-step workflows that can automatically remediate issues, like restarting failed instances or applying patches."),
+  tq("Systems Manager Inventory collects information about:",["AWS billing data","Software, OS configuration, and instance metadata across your fleet","CloudTrail events","VPC traffic"],1,"SSM Inventory collects metadata about your instances including installed software, OS details, network config, and custom inventory items.")
+];
+TRIAL_Q['soa_1_s0'] = [
+  tq("AWS Config rules evaluate:",["EC2 performance metrics","Whether resource configurations comply with desired settings","Lambda function code quality","IAM password strength"],1,"Config rules continuously evaluate whether your AWS resource configurations comply with your organization's policies and best practices."),
+  tq("AWS Config can track changes to:",["Only EC2 instances","A wide range of AWS resources including EC2, S3, VPC, IAM, and more","Only S3 buckets","Only IAM users"],1,"AWS Config supports tracking configuration changes for hundreds of AWS resource types across your entire environment."),
+  tq("Config remediation actions can:",["Only send notifications","Automatically fix non-compliant resources using SSM Automation","Delete all resources","Disable AWS accounts"],1,"Config can trigger SSM Automation documents to automatically remediate resources that violate compliance rules."),
+  tq("A Config Aggregator collects data from:",["A single account only","Multiple accounts and regions into a central view","Only on-premises servers","Only CloudTrail"],1,"Config Aggregators collect Config data from multiple accounts and regions, providing an organization-wide compliance view."),
+  tq("AWS Config is different from CloudTrail because Config tracks:",["API calls","Resource configuration state over time","User login attempts","Network traffic"],1,"Config tracks resource configuration state and changes over time, while CloudTrail tracks API calls — they complement each other.")
+];
+TRIAL_Q['soa_1_s1'] = [
+  tq("AWS X-Ray helps identify:",["IAM policy errors","Performance bottlenecks in distributed applications by tracing requests","S3 storage costs","EC2 pricing"],1,"X-Ray traces requests through your application, showing a map of services and highlighting latency bottlenecks and errors."),
+  tq("X-Ray service maps show:",["Network topology diagrams","Visual representations of how services connect and where errors occur","IAM policy relationships","CloudFormation dependencies"],1,"X-Ray service maps display your application's architecture, showing connections between services with latency and error rate data."),
+  tq("X-Ray traces are composed of:",["Only timestamps","Segments and subsegments representing work done by each service","Only error messages","CloudTrail events"],1,"Traces contain segments (work done by a service) and subsegments (downstream calls), forming a complete picture of a request's journey."),
+  tq("To instrument a Lambda function with X-Ray, you:",["Rewrite the function in a different language","Enable active tracing in the Lambda configuration","Install X-Ray on a physical server","Use CloudWatch instead"],1,"Lambda has built-in X-Ray integration — you simply enable active tracing in the function's configuration to start collecting traces."),
+  tq("X-Ray annotations allow you to:",["Delete traces","Add searchable key-value pairs to traces for filtering","Modify service behavior","Create IAM policies"],1,"Annotations are indexed key-value pairs that you add to traces, making them searchable and filterable in the X-Ray console.")
+];
+// ═══ SOA-C03 DUNGEON 2: Reliability & Business Continuity (22%) ═══
+TRIAL_Q['soa_2_m0'] = [
+  tq("Which Auto Scaling policy type maintains a specific metric at a target value?",["Step Scaling","Simple Scaling","Target Tracking Scaling","Scheduled Scaling"],2,"Target Tracking automatically adjusts capacity to keep a chosen metric (like avg CPU at 50%) at your target value."),
+  tq("What is the difference between RTO and RPO?",["They are the same concept","RTO is max downtime acceptable; RPO is max data loss acceptable","RPO is max downtime; RTO is max data loss","Both measure cost of downtime"],1,"RTO (Recovery Time Objective) = how long you can be down. RPO (Recovery Point Objective) = how much data you can afford to lose."),
+  tq("An Auto Scaling Group 'cooldown period' prevents:",["Instances from terminating","Rapid fluctuation by waiting before launching or terminating more instances","Health checks from running","Load balancer from routing traffic"],1,"Cooldown prevents ASG from rapidly scaling in/out — it waits for previous activities to take effect before responding to new alarms."),
+  tq("Which scaling policy launches a specific number of instances based on time of day?",["Target Tracking","Step Scaling","Simple Scaling","Scheduled Scaling"],3,"Scheduled Scaling launches or terminates a specific number of instances at a scheduled time, ideal for predictable traffic patterns."),
+  tq("ELB health checks determine:",["Instance pricing","Whether instances receive traffic from the load balancer","IAM role assignments","AMI version"],1,"ELB health checks continuously test instances and only route traffic to healthy ones, automatically excluding unhealthy instances.")
+];
+TRIAL_Q['soa_2_m1'] = [
+  tq("Which DR strategy involves running a minimal version of your environment always on in the cloud?",["Backup & Restore","Pilot Light","Warm Standby","Multi-Site Active/Active"],1,"Pilot Light keeps a minimal core (like a replicated DB) always running. You scale it up during recovery, giving faster RTO than Backup & Restore."),
+  tq("AWS Backup supports which of the following services?",["Only EC2","Only RDS","EC2, RDS, DynamoDB, EFS, S3, FSx, and more","Only S3 and DynamoDB"],2,"AWS Backup provides centralized backup management for EC2, EBS, RDS, DynamoDB, EFS, S3, FSx, and Storage Gateway."),
+  tq("Point-in-time recovery (PITR) for DynamoDB allows you to:",["Delete a table and recreate it","Restore a table to any second within the last 35 days","Only restore from daily backups","Restore to a different AWS account"],1,"DynamoDB PITR enables continuous backups and restores to any second in the last 35 days with no performance impact."),
+  tq("Which RDS feature automatically maintains a standby replica in a different AZ?",["Read Replica","Multi-AZ Deployment","Aurora Global Database","RDS Proxy"],1,"RDS Multi-AZ keeps a synchronous standby replica in a different AZ; failover is automatic and typically completes in 1-2 minutes."),
+  tq("What is the primary difference between RDS Read Replicas and Multi-AZ?",["Both serve the same purpose","Read Replicas improve read performance; Multi-AZ improves availability/failover","Multi-AZ improves read performance; Read Replicas improve availability","Read Replicas are more expensive"],1,"Read Replicas offload read traffic (performance). Multi-AZ maintains a standby for automatic failover (availability). They serve different goals.")
+];
+TRIAL_Q['soa_2_m2'] = [
+  tq("Route 53 failover routing requires:",["Only a primary record","Health checks on the primary endpoint and a secondary failover record","At least 3 endpoints","A dedicated IP address"],1,"Route 53 failover routing uses health checks to determine if the primary is healthy; if not, it serves the secondary (failover) record."),
+  tq("What DNS TTL setting gives the fastest failover response?",["High TTL (e.g., 86400 seconds)","Low TTL (e.g., 60 seconds)","Medium TTL (300 seconds)","TTL has no effect on failover speed"],1,"Low TTL means DNS resolvers cache records for less time, so clients re-query sooner and receive the updated failover address faster."),
+  tq("Aurora Global Database enables:",["Multi-AZ failover within one region","Cross-region read replicas with sub-second replication lag and fast disaster recovery","Automatic schema migration","NoSQL support"],1,"Aurora Global Database replicates across up to 5 regions with typical lag under 1 second and can promote a secondary region in under 1 minute."),
+  tq("S3 Cross-Region Replication requires:",["Only versioning on the source bucket","Versioning enabled on both source and destination buckets","An internet gateway","Direct Connect"],1,"S3 CRR requires versioning enabled on both the source and destination buckets before replication can be configured."),
+  tq("Which EC2 feature creates an exact copy of an instance's EBS volumes for DR?",["AMI","EBS Snapshot","Launch Template","Auto Scaling"],1,"EBS Snapshots are point-in-time backups of volumes stored in S3. They can be copied cross-region for DR and used to restore volumes.")
+];
+TRIAL_Q['soa_2_s0'] = [
+  tq("Aurora Serverless v2 automatically:",["Requires manual capacity planning","Scales capacity up or down in fine-grained increments in seconds","Only scales during maintenance windows","Requires Fargate"],1,"Aurora Serverless v2 instantly scales in fine-grained increments from 0.5 to 128 ACUs based on demand, with no disruption to connections."),
+  tq("RDS Proxy helps with reliability by:",["Providing read replicas","Pooling database connections and reducing failover time from minutes to seconds","Encrypting data at rest","Auto-patching the database engine"],1,"RDS Proxy maintains a warm pool of connections to reduce failover time and shields the database from connection spikes during traffic surges.")
+];
+TRIAL_Q['soa_2_s1'] = [
+  tq("Which S3 storage class provides the highest durability and availability for frequently accessed data?",["S3 Glacier","S3 One Zone-IA","S3 Standard","S3 Intelligent-Tiering"],2,"S3 Standard provides 99.999999999% (11 9s) durability and 99.99% availability, designed for frequently accessed data."),
+  tq("AWS Resilience Hub helps you:",["Deploy EC2 instances","Assess, validate, and track application resiliency against defined RTO/RPO targets","Monitor CloudWatch metrics","Configure IAM roles"],1,"Resilience Hub analyzes your application's resiliency posture and provides recommendations to meet your RTO/RPO targets before a disruption occurs.")
+];
+
+// ═══ SOA-C03 DUNGEON 3: Deployment, Provisioning & Automation (22%) ═══
+TRIAL_Q['soa_3_m0'] = [
+  tq("In a CloudFormation template, which section defines the actual AWS resources to be created?",["Parameters","Outputs","Resources","Mappings"],2,"The Resources section is the only required section in a CloudFormation template and defines all AWS resources to be created."),
+  tq("CloudFormation Change Sets allow you to:",["Delete stacks","Preview what changes will be made before executing an update","Import existing resources","Create nested stacks"],1,"Change Sets show a summary of proposed changes before you execute them, preventing unexpected modifications to critical resources."),
+  tq("CloudFormation Drift Detection identifies:",["Security vulnerabilities","Resources where actual configuration differs from the template","Cost optimization opportunities","Unused resources"],1,"Drift detection compares the live state of resources against the CloudFormation template to find manual changes made outside CloudFormation."),
+  tq("StackSets enable CloudFormation to:",["Nest stacks within stacks","Deploy stacks across multiple accounts and regions in one operation","Reuse common template components","Roll back changes"],1,"StackSets deploy and manage CloudFormation stacks across multiple AWS accounts and regions from a single CloudFormation template."),
+  tq("Which CloudFormation feature lets you reference other stack's outputs?",["Stack Policies","Nested Stacks with ImportValue/ExportValue","Change Sets","StackSets"],1,"The Fn::ImportValue function imports a value exported from another stack, enabling cross-stack referencing of outputs.")
+];
+TRIAL_Q['soa_3_m1'] = [
+  tq("In AWS CDK, what does 'cdk synth' do?",["Deploys the stack","Synthesizes a CloudFormation template from CDK code","Destroys resources","Validates IAM policies"],1,"cdk synth runs the CDK app and generates the CloudFormation template that will be used for deployment."),
+  tq("CDK L2 constructs differ from L1 (Cfn) constructs by:",["Being lower level","Providing sensible defaults, helper methods, and higher-level abstractions","Requiring more code to configure","Not supporting CloudFormation"],1,"L2 constructs are purpose-built for specific AWS resources with sensible defaults, reducing boilerplate compared to L1 raw CloudFormation resources."),
+  tq("Which deployment type in CodeDeploy sends traffic to new instances before removing old ones?",["Blue/Green Deployment","AllAtOnce","Rolling","In-place"],0,"Blue/Green deployments provision a new (green) environment, shift traffic to it, then decommission the old (blue) environment."),
+  tq("CodeDeploy 'Canary' deployment traffic splitting means:",["Route 50% immediately then 50% after a period","Route a small initial percentage then all remaining traffic after a wait","Route to all instances at once","Route alphabetically"],1,"Canary deployments shift a small initial percentage (e.g., 10%) of traffic to the new version, validate it, then shift the remainder."),
+  tq("AWS Systems Manager Run Command allows you to:",["Deploy CloudFormation stacks","Remotely execute commands on EC2 instances without SSH","Create VPCs","Monitor CloudWatch metrics"],1,"Run Command executes scripts or commands on managed EC2 instances without opening SSH/RDP ports, with full logging of output.")
+];
+TRIAL_Q['soa_3_m2'] = [
+  tq("Which ECS launch type removes the need to manage EC2 container hosts?",["EC2 launch type","External launch type","Fargate launch type","EKS launch type"],2,"Fargate is serverless for containers — you define CPU/memory requirements and Fargate provisions, runs, and scales the underlying infrastructure."),
+  tq("An ECS Task Definition specifies:",["VPC routing rules","IAM user permissions","The container image, CPU, memory, networking, and environment variables for a container workload","CloudWatch alarm thresholds"],2,"Task Definitions are blueprints for ECS tasks, defining the Docker image, resource requirements, networking mode, environment variables, and IAM role."),
+  tq("Amazon ECR is used to:",["Run containerized workloads","Store, manage, and deploy container images","Configure EKS clusters","Monitor container performance"],1,"ECR is a fully managed Docker container registry for storing, managing, and deploying container images with integrated IAM access control."),
+  tq("Elastic Beanstalk handles which of the following automatically?",["Writing your application code","Provisioning EC2, load balancing, auto scaling, and application health monitoring","Creating IAM users","Configuring VPN connections"],1,"Elastic Beanstalk is a PaaS that automatically handles capacity provisioning, load balancing, scaling, and health monitoring — you just deploy code."),
+  tq("Which Elastic Beanstalk deployment policy minimizes downtime by deploying to one instance at a time?",["All at once","Rolling","Immutable","Blue/Green"],1,"Rolling deployment updates a batch of instances at a time, keeping most capacity available, though it can cause brief performance reduction.")
+];
+TRIAL_Q['soa_3_s0'] = [
+  tq("CI/CD stands for:",["Cloud Infrastructure and Cost Deployment","Continuous Integration and Continuous Delivery/Deployment","Container Integration and Container Delivery","Compute Integration and Cloud Development"],1,"CI/CD automates the process of integrating code changes (CI) and reliably releasing them to production (CD) via automated pipelines."),
+  tq("AWS CodePipeline orchestrates which activities?",["EC2 instance provisioning only","Source, build, test, and deploy stages in a software release workflow","IAM policy creation","CloudWatch alarm management"],1,"CodePipeline automates the complete release pipeline: pulling source from CodeCommit/GitHub, building with CodeBuild, and deploying with CodeDeploy or Elastic Beanstalk.")
+];
+TRIAL_Q['soa_3_s1'] = [
+  tq("Service Catalog allows organizations to:",["Monitor service performance","Create and manage approved product portfolios that teams can self-service deploy","Replace CloudFormation","Automate EC2 patching"],1,"Service Catalog lets administrators define approved CloudFormation-based products (e.g., approved EC2 configurations) that end users can deploy without needing full AWS access."),
+  tq("AWS OpsWorks uses which configuration management systems?",["Only Ansible","Chef and Puppet","Terraform and Pulumi","CloudFormation and CDK"],1,"OpsWorks is a configuration management service that uses Chef or Puppet to automate server configuration, deployment, and management.")
+];
+
+// ═══ SOA-C03 DUNGEON 4: Security & Compliance (16%) ═══
+TRIAL_Q['soa_4_m0'] = [
+  tq("An IAM Permission Boundary sets:",["The minimum permissions an entity must have","The maximum permissions an IAM entity can be granted, regardless of other policies","A list of denied services","The default permissions for new IAM users"],1,"Permission boundaries cap the maximum permissions. Even if an identity policy grants more, the effective permissions are the intersection with the boundary."),
+  tq("AWS Organizations SCPs restrict:",["IAM users in the management account","All IAM principals in member accounts, including the root user","Only service roles","Only Lambda execution roles"],1,"SCPs act as guardrails on what actions can be performed by any principal in the member accounts, even if identity policies allow them."),
+  tq("Cross-account IAM access works by:",["Sharing IAM credentials between accounts","Creating a role in the target account that the source account principal can assume via sts:AssumeRole","Using the same user in both accounts","Linking accounts in the console"],1,"Cross-account access uses IAM roles: the trusted account (source) has permission to call sts:AssumeRole on a role in the trusting account (target)."),
+  tq("Which IAM feature lets you grant an EC2 instance permissions to call AWS APIs?",["IAM User credentials stored in the instance","IAM Instance Profile (attaching a role to the instance)","Access keys in environment variables","Hard-coded credentials in code"],1,"IAM Instance Profiles attach an IAM role to an EC2 instance, so applications running on it can call AWS APIs using temporary credentials — no hard-coded keys needed."),
+  tq("The principle of least privilege means:",["Grant all permissions upfront to avoid access issues","Grant only the minimum permissions needed to perform a task","Use root credentials for all tasks","Never create IAM users"]  ,1,"Least privilege is a security best practice: grant only the exact permissions needed for a task and nothing more, reducing the blast radius of credential compromise.")
+];
+TRIAL_Q['soa_4_m1'] = [
+  tq("KMS Customer Managed Keys (CMKs) differ from AWS Managed Keys by:",["CMKs are less secure","CMKs give you full control over key policies, rotation, and auditing","AWS Managed Keys are more expensive","CMKs cannot be used with S3"],1,"CMKs let you define key policies, enable/disable keys, configure rotation schedules, and audit usage via CloudTrail — full control vs AWS-managed defaults."),
+  tq("Envelope encryption in KMS works by:",["Encrypting all data with the CMK directly","Encrypting a data key with the CMK, then using the data key to encrypt actual data","Using two CMKs simultaneously","Encrypting only metadata"],1,"Envelope encryption uses a CMK to encrypt a data encryption key (DEK), which actually encrypts the data. This avoids sending large data through KMS."),
+  tq("AWS Secrets Manager differs from SSM Parameter Store by:",["Secrets Manager is less secure","Secrets Manager provides automatic secret rotation with Lambda, while Parameter Store does not natively rotate","Parameter Store is always free; Secrets Manager costs money","Both are identical in features"],1,"Secrets Manager auto-rotates credentials (RDS passwords, API keys) using Lambda functions, a key differentiator from Parameter Store."),
+  tq("Which service automatically discovers and protects sensitive data in S3?",["GuardDuty","Inspector","Amazon Macie","Security Hub"],2,"Macie uses ML to automatically discover, classify, and protect sensitive data (PII, credentials) in S3, generating findings for unprotected sensitive content."),
+  tq("Which service provides a unified view of security findings from GuardDuty, Inspector, Macie, and others?",["CloudWatch","Security Hub","CloudTrail","Config"],1,"Security Hub aggregates, normalizes, and prioritizes security findings from multiple AWS security services into a single consolidated view.")
+];
+TRIAL_Q['soa_4_m2'] = [
+  tq("Amazon GuardDuty detects threats by analyzing:",["Application code","VPC Flow Logs, CloudTrail management events, and DNS query logs","S3 object metadata","EC2 CPU metrics"],1,"GuardDuty continuously analyzes VPC Flow Logs, CloudTrail events, and Route 53 DNS logs to detect threats using ML and threat intelligence."),
+  tq("Amazon Inspector scans for:",["Cost optimization opportunities","Software vulnerabilities in EC2 instances and container images in ECR","S3 bucket permissions","CloudTrail log anomalies"],1,"Inspector automatically and continuously scans EC2 instances and ECR container images for software vulnerabilities and unintended network exposure."),
+  tq("AWS Config Conformance Packs are:",["Single Config rules","Collections of Config rules and remediation actions deployed as a single unit","CloudFormation templates","Cost reports"],1,"Conformance Packs bundle multiple AWS Config rules and optional remediation actions together for compliance against frameworks like CIS, PCI DSS, or HIPAA."),
+  tq("To prevent an IAM user from disabling CloudTrail logging, you should use:",["S3 bucket ACLs","An SCP via AWS Organizations that denies cloudtrail:StopLogging","IAM policy without explicit allow","CloudWatch alarms"],1,"An SCP applied via Organizations can deny the cloudtrail:StopLogging action across all member accounts, preventing any user from disabling audit logging."),
+  tq("S3 Block Public Access settings can be applied at:",["Only the bucket level","Only the account level","Both the bucket level and the account level","Only the object level"],2,"S3 Block Public Access can be configured at the account level (blocks all buckets) or individual bucket level, providing layered protection.")
+];
+TRIAL_Q['soa_4_s0'] = [
+  tq("AWS WAF Web ACLs can be attached to:",["EC2 instances directly","CloudFront distributions, ALBs, API Gateway, and AppSync","Only CloudFront","Only API Gateway"],1,"WAF Web ACLs can be associated with CloudFront distributions, Application Load Balancers, API Gateway REST APIs, and AWS AppSync GraphQL APIs."),
+  tq("Network Firewall differs from Security Groups by:",["Both are the same","Network Firewall provides stateful packet inspection at the VPC perimeter; SGs operate at the instance level","Security Groups are more powerful","Network Firewall cannot filter HTTP traffic"],1,"AWS Network Firewall is a managed stateful firewall service for the VPC perimeter, supporting deep packet inspection with IDS/IPS capabilities.")
+];
+TRIAL_Q['soa_4_s1'] = [
+  tq("ACM (AWS Certificate Manager) provides:",["IAM user certificates","Free TLS/SSL certificates for use with AWS services like ALB, CloudFront, and API Gateway","EC2 key pairs","KMS encryption keys"],1,"ACM provisions and manages free TLS/SSL certificates for AWS services, handling renewal automatically. Certificates from ACM cannot be exported."),
+  tq("Which service helps you identify unused IAM permissions and right-size policies?",["CloudTrail","IAM Access Analyzer","GuardDuty","AWS Config"],1,"IAM Access Analyzer identifies resources shared externally, generates least-privilege policies from CloudTrail activity, and validates policies for correctness.")
+];
+
+// ═══ SOA-C03 DUNGEON 5: Networking & Content Delivery (18%) ═══
+TRIAL_Q['soa_5_m0'] = [
+  tq("A VPC Interface Endpoint (PrivateLink) provides:",["Public internet access to AWS services","Private connectivity to AWS services without traversing the internet, using ENIs in your subnets","VPC peering between two VPCs","A dedicated physical connection"],1,"Interface Endpoints use AWS PrivateLink to create private IP addresses in your VPC for accessing AWS services, keeping traffic off the public internet."),
+  tq("Transit Gateway differs from VPC Peering by:",["Transit Gateway only supports 2 VPCs","Transit Gateway acts as a hub router supporting transitive routing between many VPCs and on-premises; VPC Peering is non-transitive point-to-point","VPC Peering scales better","Both support transitive routing"],1,"VPC Peering is one-to-one and non-transitive (A→B and B→C doesn't mean A→C). Transit Gateway enables hub-and-spoke routing among hundreds of VPCs."),
+  tq("The difference between Security Groups and Network ACLs is:",["Both are identical","SGs are stateful and apply to instances; NACLs are stateless and apply at the subnet level","NACLs are stateful; SGs are stateless","SGs apply to subnets; NACLs apply to instances"],1,"Security Groups track connections (stateful) and apply to ENIs. NACLs evaluate each packet independently (stateless) and apply to all traffic crossing a subnet boundary."),
+  tq("A NAT Gateway allows instances in private subnets to:",["Receive inbound internet connections","Initiate outbound internet connections while blocking inbound connections from the internet","Communicate with other VPCs","Access S3 via a private connection"],1,"NAT Gateways perform network address translation, allowing private instances to reach the internet for updates/patches while blocking unsolicited inbound connections."),
+  tq("VPC Flow Logs capture:",["Application-level HTTP requests","Metadata about IP traffic (source/dest IP, port, protocol, bytes, accept/reject) going to/from network interfaces","Full packet payloads","IAM API calls"],1,"VPC Flow Logs record IP traffic metadata at the VPC, subnet, or ENI level for network analysis, security auditing, and troubleshooting.")
+];
+TRIAL_Q['soa_5_m1'] = [
+  tq("CloudFront's 'cache invalidation' removes:",["Objects from S3","Cached copies of objects from edge locations before they expire naturally","IAM permissions","Route 53 DNS records"],1,"Cache invalidation removes objects from CloudFront edge location caches before their TTL expires, forcing the next request to fetch fresh content from the origin."),
+  tq("CloudFront Origin Access Control (OAC) is used to:",["Speed up dynamic content","Restrict S3 bucket access so only CloudFront can read objects (not direct public S3 URLs)","Enable HTTPS between viewers and CloudFront","Configure WAF on CloudFront"],1,"OAC (replacing OAI) ensures S3 content can only be accessed through CloudFront, preventing users from bypassing CloudFront to access S3 directly."),
+  tq("Lambda@Edge functions execute:",["Only in us-east-1","At CloudFront edge locations in response to viewer and origin request/response events","Inside a VPC only","On EC2 instances only"],1,"Lambda@Edge runs Lambda functions globally at CloudFront edge locations for viewer requests, viewer responses, origin requests, and origin responses."),
+  tq("AWS Global Accelerator improves performance by:",["Caching content at edge locations like CloudFront","Routing traffic to optimal endpoints via AWS's global network using Anycast IP addresses","Compressing HTTP responses","Adding more EC2 instances automatically"],1,"Global Accelerator routes user traffic to optimal AWS endpoints over the AWS backbone network, reducing internet hops and improving availability for non-cacheable content."),
+  tq("Route 53 'Weighted' routing is commonly used for:",["DNS failover only","A/B testing or gradual traffic shifting between different versions of an application","Routing based on user geography","Health-check-based routing only"],0,"Weighted routing assigns relative weights to resource records, enabling traffic splitting — for example, sending 10% to a new version while keeping 90% on the current version.")
+];
+TRIAL_Q['soa_5_m2'] = [
+  tq("AWS Site-to-Site VPN uses:",["Dedicated fiber connections","Encrypted IPsec tunnels over the public internet to connect on-premises to a VPC","Direct physical cables","Private MPLS circuits"],1,"Site-to-Site VPN creates encrypted IPsec tunnels between a Customer Gateway (on-premises device) and a Virtual Private Gateway (AWS side) over the public internet."),
+  tq("AWS Direct Connect advantages over VPN include:",["Lower cost always","More consistent network performance, higher bandwidth, and lower latency than internet-based VPN","Encrypted by default","Faster setup time"],1,"Direct Connect provides a dedicated private physical connection with consistent throughput and lower latency, unlike VPN which shares the public internet."),
+  tq("Which Route 53 routing policy routes users to the lowest-latency AWS Region?",["Simple routing","Weighted routing","Latency-based routing","Geolocation routing"],2,"Latency-based routing measures actual network latency from users to AWS Regions and routes each request to the Region providing the lowest latency."),
+  tq("An Application Load Balancer routes traffic based on:",["IP address only","HTTP/HTTPS request attributes including path, hostname, headers, and query strings","TCP port only","Source MAC address"],1,"ALBs operate at Layer 7 and make intelligent routing decisions based on URL path (/api vs /images), hostname, HTTP headers, query strings, and HTTP methods."),
+  tq("Network Load Balancers are best suited for:",["HTTP path-based routing","High-performance TCP/UDP traffic requiring static IP addresses and ultra-low latency","WebSocket-only applications","Routing based on HTTP headers"],1,"NLBs operate at Layer 4 (TCP/UDP), handle millions of requests per second with ultra-low latency, and support static Elastic IP addresses per AZ.")
+];
+TRIAL_Q['soa_5_s0'] = [
+  tq("A VPC Gateway Endpoint provides private access to:",["All AWS services","Only S3 and DynamoDB (no charge, no ENI required)","Only RDS","Services via PrivateLink"],1,"Gateway Endpoints are free and route traffic to S3 or DynamoDB via route table entries without requiring an ENI, NAT Gateway, or internet gateway."),
+  tq("AWS Network Firewall is deployed:",["As a security group rule","As a stateful firewall endpoint in a dedicated firewall subnet, inspecting VPC perimeter traffic","On EC2 instances","In CloudFront edge locations"],1,"Network Firewall is a managed VPC-perimeter firewall deployed in dedicated subnets. Traffic is routed through it for stateful inspection, IDS/IPS, and domain filtering.")
+];
+TRIAL_Q['soa_5_s1'] = [
+  tq("PrivateLink (Interface Endpoints) differ from Gateway Endpoints by:",["Gateway Endpoints are more expensive","Interface Endpoints create ENIs in your subnet (costing money) and work with many AWS services; Gateway Endpoints are free and only work with S3/DynamoDB","Both work identically","Gateway Endpoints support more services"],1,"Interface Endpoints use ENIs and PrivateLink technology to work with 100+ AWS services and SaaS providers. Gateway Endpoints are route-table-based, free, and limited to S3/DynamoDB."),
+  tq("Route 53 Resolver endpoints enable:",["Public DNS queries only","Hybrid DNS — forwarding DNS queries between on-premises networks and VPCs bidirectionally","Only CloudFront DNS resolution","Only inbound queries from the internet"],1,"Route 53 Resolver Inbound Endpoints accept DNS queries from on-premises networks, and Outbound Endpoints forward VPC DNS queries to on-premises DNS servers.")
+];
+
+// ═══ SOA-C03 DUNGEON 6: Full Exam Preparation ═══
+TRIAL_Q['soa_6_m0'] = [
+  tq("The SOA-C03 exam has how many content domains?",["3","4","5","6"],2,"SOA-C03 covers 5 domains: Monitoring/Logging/Remediation (22%), Reliability/Business Continuity (22%), Deployment/Provisioning/Automation (22%), Security/Compliance (16%), and Networking (18%)."),
+  tq("Which three domains each account for 22% of the SOA-C03 exam?",["Security, Networking, Monitoring","Monitoring/Logging, Reliability/Business Continuity, Deployment/Provisioning/Automation","Networking, Security, Deployment","Reliability, Networking, Security"],1,"Domain 1 (Monitoring/Logging/Remediation), Domain 2 (Reliability/Business Continuity), and Domain 3 (Deployment/Provisioning/Automation) each contribute 22% of scored content."),
+  tq("To automatically remediate non-compliant Config rules at scale, you use:",["Manual console fixes","Config Rules linked to SSM Automation remediation documents","CloudTrail to block API calls","IAM to deny actions"],1,"Config Rules can trigger SSM Automation documents automatically when non-compliance is detected, enabling self-healing across your environment."),
+  tq("Best practice for multi-account CloudWatch monitoring is:",["One dashboard per account manually checked","CloudWatch cross-account and cross-region observability using sharing configurations","Exporting all logs to EC2","Using third-party tools only"],1,"CloudWatch cross-account observability lets you create unified dashboards, run queries, and set alarms across multiple accounts from a central monitoring account."),
+  tq("To pass the SOA-C03 exam you must score at least:",["600/1000","700/1000","720/1000","800/1000"],2,"The minimum passing score for SOA-C03 is 720 out of 1000, using AWS's scaled scoring model.")
+];
+TRIAL_Q['soa_6_m1'] = [
+  tq("A customer needs zero-downtime deployment of a Lambda function. They should use:",["Overwrite the function code directly","Lambda Aliases with weighted traffic shifting and CodeDeploy canary/linear deployments","Delete and recreate the function","CloudFormation AllAtOnce update"],1,"Lambda Aliases with traffic shifting let you gradually shift traffic from the old to new version. Combined with CodeDeploy, alarms can trigger automatic rollback."),
+  tq("To patch EC2 instances in private subnets without internet access via SSM, you need:",["A bastion host","SSM VPC Interface Endpoints (com.amazonaws.region.ssm, ssmmessages, ec2messages)","NAT instance only","Direct Connect"],1,"SSM Agent communicates with the SSM service. In private subnets, you need VPC Interface Endpoints for ssm, ssmmessages, and ec2messages to avoid internet egress."),
+  tq("CloudWatch Contributor Insights is used to:",["Create billing alarms","Analyze log data to identify top contributors to system performance issues (e.g., top IPs causing errors)","Set up composite alarms","Monitor DynamoDB read capacity"],1,"Contributor Insights creates real-time time-series data from logs showing which identifiers (IP addresses, user IDs, URLs) are contributing most to volume or errors."),
+  tq("Which service aggregates, normalizes, and prioritizes security findings from Inspector, GuardDuty, Macie, and Config?",["CloudWatch","CloudTrail","AWS Security Hub","Amazon Detective"],2,"Security Hub is the centralized security operations hub — it ingests findings from multiple AWS security services using ASFF (Amazon Security Finding Format)."),
+  tq("An SCP that denies 'ec2:TerminateInstances' in a member account means:",["Root users in that account can still terminate instances","No principal in the member account can terminate instances, even if their identity policy allows it","Only IAM users are blocked; roles can still terminate","The EC2 service is completely disabled"],1,"SCPs are guardrails — they filter what's allowed. If the SCP denies ec2:TerminateInstances, no principal in that account (including root) can perform that action.")
+];
+TRIAL_Q['soa_6_m2'] = [
+  tq("During a real-world CloudOps incident, the correct response sequence is:",["Immediately fix the issue without documenting","Detect via CloudWatch → Investigate with CloudTrail/X-Ray → Remediate with SSM → Document in post-mortem","Wait for users to report issues","Reboot all instances"],1,"The CloudOps incident workflow: detect (CloudWatch alarms) → investigate (CloudTrail events, X-Ray traces, VPC Flow Logs) → remediate (SSM Automation runbooks) → learn (post-mortem)."),
+  tq("The AWS Well-Architected Framework Operational Excellence pillar focuses on:",["Minimizing cost at all times","Running and monitoring systems to deliver business value, and continually improving operations","Maximizing instance count","Eliminating all human operations"],1,"Operational Excellence covers organizations standards, event responses, and continuous improvement of operational procedures, including runbooks and game days."),
+  tq("EventBridge (CloudWatch Events) is primarily used for:",["Storing log data","Event-driven automation — routing events from AWS services to targets like Lambda, SQS, SNS, or Step Functions","Manual deployments","Instance health checks"],1,"EventBridge is the serverless event bus. It routes events (CloudTrail API events, scheduled cron, custom events) to targets, enabling event-driven automation without polling."),
+  tq("Cost optimization for a CloudOps team includes:",["Always using On-Demand instances","Right-sizing with Compute Optimizer, using Savings Plans, deleting unused resources, and scheduling non-prod environments","Maximizing instance sizes for headroom","Ignoring Reserved Instance utilization"],1,"CloudOps cost optimization: use Compute Optimizer for right-sizing recommendations, purchase Savings Plans for steady-state workloads, and automate shutdown of non-prod environments."),
+  tq("A well-designed runbook for a CloudOps team should:",["Be a general description only","Be a step-by-step procedure with clear actions, commands, escalation paths, and rollback steps — and stored in Systems Manager","Exist only in team members' memory","Require executive approval for every step"],1,"SSM Automation runbooks codify operational procedures as executable documents, enabling consistent, auditable, and automated remediation — the cornerstone of CloudOps maturity.")
+];
+TRIAL_Q['soa_6_s0'] = [
+  tq("AWS Compute Optimizer recommends:",["IAM policies","Right-sized EC2 instance types and EBS volumes based on actual CloudWatch utilization metrics","Security group rules","CloudFormation templates"],1,"Compute Optimizer analyzes 14 days of CloudWatch metrics to recommend optimal EC2 instance types, Auto Scaling Groups, EBS volumes, Lambda memory sizes, and ECS on Fargate."),
+  tq("To ensure GuardDuty cannot be disabled across an organization, you should:",["Rely on IAM policies per account","Use an SCP that denies guardduty:DeleteDetector and guardduty:DisassociateFromMasterAccount","Enable GuardDuty manually in each account","Use CloudTrail to detect disabling"],1,"An SCP is the strongest control — it prevents any principal in any member account, regardless of their IAM permissions, from disabling GuardDuty.")
+];
+TRIAL_Q['soa_6_s1'] = [
+  tq("AWS Trusted Advisor checks include:",["Only cost recommendations","Security, cost optimization, performance, fault tolerance, service limits, and operational excellence checks","Only security checks","Only performance checks"],1,"Trusted Advisor provides real-time guidance across six categories: cost optimization, performance, security, fault tolerance, service limits, and operational excellence."),
+  tq("The primary difference between CloudWatch Logs Insights and CloudWatch Metrics is:",["Both are the same","Logs Insights queries unstructured log data for ad-hoc analysis; Metrics provides time-series numerical data for alarming and dashboards","Metrics replace Logs entirely","Logs Insights is only for Lambda"],1,"Logs Insights is an interactive query engine for log data (like SQL for logs). Metrics are numerical time-series data points that power alarms, dashboards, and auto-scaling.")
+];
+
+// SOA Dungeons 2-6 and other exams use auto-generation
+// (function below handles this)
+
+function getTrialQuestions(examId, dungeonId, questType, questIndex) {
+  var key = examId + '_' + dungeonId + '_' + questType + questIndex;
+  if (TRIAL_Q[key]) return TRIAL_Q[key];
+  // Auto-generate questions based on quest data
+  var exam = EXAMS[examId];
+  if (!exam) return generateGenericTrialQs("AWS Cloud");
+  var d = null;
+  for (var i = 0; i < exam.dungeons.length; i++) {
+    if (exam.dungeons[i].id === dungeonId) { d = exam.dungeons[i]; break; }
+  }
+  if (!d) return generateGenericTrialQs("AWS Cloud");
+  var quest = questType === 'm' ? d.mainQuests[questIndex] : d.sideQuests[questIndex];
+  if (!quest) return generateGenericTrialQs(d.topic);
+  return generateTopicTrialQs(d.topic, quest.name, quest.lesson, examId);
+}
+
+function generateTopicTrialQs(topic, questName, lesson, examId) {
+  var seed = hashStr(topic + questName + lesson + examId);
+  var pool = getTopicQuestionPool(topic, questName, examId);
+  // Shuffle deterministically based on seed
+  var shuffled = shuffleWithSeed(pool, seed);
+  return shuffled.slice(0, 5);
+}
+
+function hashStr(s) {
+  var h = 0;
+  for (var i = 0; i < s.length; i++) { h = ((h << 5) - h + s.charCodeAt(i)) | 0; }
+  return Math.abs(h);
+}
+
+function shuffleWithSeed(arr, seed) {
+  var a = arr.slice();
+  var m = a.length, t, i;
+  while (m) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    i = seed % m--;
+    t = a[m]; a[m] = a[i]; a[i] = t;
+  }
+  return a;
+}
+
+function getTopicQuestionPool(topic, questName, examId) {
+  var t = (topic + ' ' + questName).toLowerCase();
+  // Large pool of reusable questions organized by theme
+  var pools = {
+    compute: [
+      tq("Which EC2 instance family is optimized for compute-intensive tasks?",["T family (burstable)","C family (compute optimized)","R family (memory optimized)","I family (storage optimized)"],1,"C-family instances are designed for compute-bound applications that benefit from high-performance processors."),
+      tq("What is an Amazon Machine Image (AMI)?",["A monitoring tool","A template containing the software configuration to launch an instance","A networking component","A storage volume"],1,"An AMI provides the information required to launch an EC2 instance, including the OS, application server, and applications."),
+      tq("EC2 instance metadata can be accessed from:",["The AWS Console only","Within the instance at a special IP address (169.254.169.254)","CloudTrail only","S3 buckets only"],1,"Instance metadata is available from within the running instance at the link-local address 169.254.169.254."),
+      tq("Elastic Load Balancing distributes traffic across:",["A single EC2 instance","Multiple targets across one or more Availability Zones","A single AZ only","Only Lambda functions"],1,"ELB automatically distributes incoming traffic across multiple targets in one or more AZs for high availability."),
+      tq("Which load balancer type operates at Layer 7 (HTTP/HTTPS)?",["Network Load Balancer","Gateway Load Balancer","Application Load Balancer","Classic Load Balancer"],2,"Application Load Balancer operates at Layer 7, making routing decisions based on HTTP headers, paths, and host names."),
+      tq("Auto Scaling ensures you have:",["A fixed number of instances always","The right number of instances to handle current load","Only the minimum number of instances","No instances running"],1,"Auto Scaling dynamically adjusts the number of instances to match demand, scaling out during peaks and in during valleys."),
+      tq("What is a burstable instance type (T family) designed for?",["Constant high CPU usage","Workloads that occasionally need high CPU but mostly run at low utilization","GPU-intensive tasks","Storage-heavy applications"],1,"T-family instances provide a baseline CPU performance with the ability to burst above it when needed, ideal for variable workloads.")
+    ],
+    networking: [
+      tq("A VPC spans across:",["A single Availability Zone","A single Region","Multiple Regions","The entire AWS global network"],1,"A VPC is Region-scoped — it can span across all Availability Zones within a single AWS Region."),
+      tq("A subnet is associated with:",["An entire Region","A single Availability Zone","Multiple Regions","A single EC2 instance"],1,"Each subnet exists in a single Availability Zone and cannot span across AZs."),
+      tq("An Internet Gateway enables:",["Private subnet internet access","Communication between a VPC and the internet","VPC-to-VPC peering","Database replication"],1,"An Internet Gateway provides a target for internet-routable traffic and performs NAT for instances with public IP addresses."),
+      tq("Transit Gateway connects:",["Two subnets within a VPC","Multiple VPCs and on-premises networks through a central hub","A single EC2 instance to S3","Two S3 buckets"],1,"Transit Gateway acts as a network transit hub, connecting multiple VPCs and on-premises networks in a hub-and-spoke model."),
+      tq("VPC Endpoints allow you to:",["Connect to the internet","Privately connect your VPC to AWS services without using the internet","Create public subnets","Enable VPC peering"],1,"VPC Endpoints let you privately connect to AWS services like S3 and DynamoDB without traversing the internet."),
+      tq("A NAT Gateway is placed in:",["A private subnet","A public subnet","An isolated subnet","Outside the VPC"],1,"NAT Gateways are deployed in public subnets and allow instances in private subnets to reach the internet for outbound traffic."),
+      tq("Security Groups act as:",["Subnet-level firewalls","Instance-level virtual firewalls","Region-level access controls","Account-level policies"],1,"Security Groups operate at the instance level, controlling inbound and outbound traffic for individual EC2 instances.")
+    ],
+    storage: [
+      tq("Amazon S3 stores data as:",["Files in directories","Objects in buckets","Blocks on volumes","Rows in tables"],1,"S3 is an object storage service that stores data as objects within buckets, each identified by a unique key."),
+      tq("S3 Standard-IA is designed for:",["Frequently accessed data","Infrequently accessed data that needs rapid access when requested","Archival data retrieved once a year","Real-time streaming data"],1,"Standard-IA (Infrequent Access) is for data accessed less often but requires rapid access when needed, at a lower storage cost."),
+      tq("Amazon EBS volumes are:",["Object storage","Block-level storage volumes attached to EC2 instances","File storage systems","Data warehouse storage"],1,"EBS provides persistent block-level storage volumes for use with EC2 instances, like virtual hard drives."),
+      tq("Amazon EFS provides:",["Block storage","Object storage","Managed NFS file storage accessible from multiple instances","Data warehousing"],2,"EFS is a fully managed, elastic NFS file system that can be mounted by multiple EC2 instances simultaneously."),
+      tq("S3 Cross-Region Replication is used for:",["Reducing storage costs","Automatically replicating objects to a bucket in another Region","Encrypting data at rest","Creating VPC endpoints"],1,"Cross-Region Replication automatically copies objects from a source bucket to a destination bucket in a different AWS Region."),
+      tq("S3 Transfer Acceleration speeds up uploads by:",["Using larger objects","Routing data through CloudFront edge locations","Compressing all data","Using dedicated network connections"],1,"Transfer Acceleration uses CloudFront's globally distributed edge locations to route data to S3 over an optimized network path."),
+      tq("Which storage service provides the lowest cost per GB?",["EBS General Purpose SSD","S3 Standard","S3 Glacier Deep Archive","EFS"],2,"S3 Glacier Deep Archive offers the lowest storage cost in AWS, designed for data retained for 7-10 years with retrieval times of 12 hours.")
+    ],
+    security: [
+      tq("The principle of least privilege means:",["Granting all permissions by default","Granting only the minimum permissions needed for a task","Using the root account for daily operations","Sharing credentials between team members"],1,"Least privilege ensures users and services have only the permissions they absolutely need, reducing the blast radius of potential compromises."),
+      tq("AWS Organizations SCPs can:",["Grant permissions","Set maximum permission boundaries for member accounts","Replace IAM policies entirely","Manage EC2 instances"],1,"SCPs define the maximum permissions available to principals in member accounts — they restrict but cannot grant permissions."),
+      tq("KMS key rotation:",["Deletes old encrypted data","Creates new key material while keeping the key ID, automatically decrypting with old versions","Requires re-encrypting all data manually","Is not supported"],1,"KMS automatic key rotation creates new cryptographic material annually while maintaining the ability to decrypt data encrypted with previous versions."),
+      tq("AWS GuardDuty is a:",["Firewall service","Intelligent threat detection service","Identity management tool","Database encryption service"],1,"GuardDuty continuously monitors for malicious activity and unauthorized behavior by analyzing CloudTrail, VPC Flow Logs, and DNS logs."),
+      tq("Amazon Inspector automatically assesses:",["AWS billing","Software vulnerabilities and network exposure on EC2 and containers","IAM policy correctness","CloudFormation template syntax"],1,"Inspector performs automated vulnerability assessments, scanning EC2 instances and container images for software vulnerabilities."),
+      tq("AWS Secrets Manager differs from Parameter Store by:",["Being free","Offering automatic secret rotation built-in","Storing only plain text","Not integrating with Lambda"],1,"Secrets Manager provides built-in automatic rotation of secrets (like database passwords) using Lambda functions, while Parameter Store requires custom rotation."),
+      tq("IAM Access Analyzer identifies:",["Performance bottlenecks","Resources shared with external entities outside your trust zone","Unused EC2 instances","Expensive S3 objects"],1,"Access Analyzer uses automated reasoning to identify resources accessible from outside your account or organization.")
+    ],
+    database: [
+      tq("Amazon Aurora provides up to:",["2x MySQL performance","3x PostgreSQL performance","5x MySQL and 3x PostgreSQL performance","10x MySQL performance"],2,"Aurora delivers up to 5x the throughput of standard MySQL and 3x the throughput of standard PostgreSQL."),
+      tq("DynamoDB Accelerator (DAX) provides:",["Disk-based caching","In-memory caching for DynamoDB with microsecond response times","SQL query support for DynamoDB","Cross-region replication"],1,"DAX is a fully managed, in-memory cache for DynamoDB that delivers up to 10x read performance improvement."),
+      tq("Amazon RDS automated backups provide:",["Only manual snapshot capability","Point-in-time recovery within a configurable retention period","No backup capability","Only weekly backups"],1,"RDS automated backups enable point-in-time recovery, allowing you to restore your database to any second within the retention period."),
+      tq("DynamoDB Global Tables provide:",["Single-region deployment","Multi-region, multi-active replication with local read/write performance","Read-only replicas in other regions","Manual data synchronization"],1,"Global Tables automatically replicate DynamoDB tables across multiple AWS Regions, providing local read/write performance everywhere."),
+      tq("Amazon ElastiCache supports which engines?",["MySQL and PostgreSQL","Redis and Memcached","MongoDB and Cassandra","Oracle and SQL Server"],1,"ElastiCache supports two popular in-memory engines: Redis (feature-rich with persistence) and Memcached (simple, high-performance caching)."),
+      tq("Amazon Redshift Spectrum allows you to:",["Run DynamoDB queries","Query data directly in S3 without loading it into Redshift","Create VPC subnets","Manage IAM policies"],1,"Redshift Spectrum lets you run SQL queries against exabytes of data in S3 without having to load or transform it first."),
+      tq("RDS Proxy improves database reliability by:",["Adding more storage","Pooling connections to reduce failover time from minutes to seconds","Encrypting data at rest","Creating read replicas automatically"],1,"RDS Proxy manages a pool of database connections, reducing connection overhead and improving failover time.")
+    ],
+    serverless: [
+      tq("AWS Lambda automatically scales by:",["Requiring manual instance provisioning","Running concurrent executions in response to each trigger","Using Auto Scaling Groups","Using Reserved capacity"],1,"Lambda automatically runs your code in response to events, scaling from zero to thousands of concurrent executions seamlessly."),
+      tq("API Gateway integrates with Lambda to:",["Store data in S3","Create RESTful and WebSocket APIs that invoke Lambda functions","Manage IAM users","Monitor CloudWatch metrics"],1,"API Gateway creates fully managed APIs that trigger Lambda functions, enabling serverless REST and WebSocket applications."),
+      tq("AWS SAM (Serverless Application Model) is:",["A monitoring tool","A framework for building serverless applications with simplified CloudFormation syntax","A database service","A security tool"],1,"SAM extends CloudFormation with simplified syntax for defining serverless resources like Lambda functions, APIs, and DynamoDB tables."),
+      tq("Lambda layers allow you to:",["Increase execution time limits","Share common code and libraries across multiple Lambda functions","Create VPC subnets","Manage IAM roles"],1,"Lambda layers package libraries, custom runtimes, or other dependencies that can be shared across multiple functions."),
+      tq("Lambda@Edge runs code at:",["Only in us-east-1","CloudFront edge locations closest to users worldwide","Only inside VPCs","Only in the Region where the function is created"],1,"Lambda@Edge executes Lambda functions at CloudFront edge locations, enabling low-latency content customization globally."),
+      tq("Step Functions use which model to define workflows?",["SQL queries","State machines with JSON-based Amazon States Language","Python scripts","CloudFormation templates"],1,"Step Functions use state machines defined in Amazon States Language (JSON) to orchestrate multiple AWS services into workflows."),
+      tq("Amazon EventBridge is used for:",["Storing events permanently","Building event-driven architectures by routing events between services","Managing DNS records","Creating EC2 instances"],1,"EventBridge is a serverless event bus that connects applications using events, enabling loosely coupled, event-driven architectures.")
+    ],
+    monitoring: [
+      tq("CloudWatch Logs Insights allows you to:",["Create EC2 instances","Interactively search and analyze log data with a query language","Manage IAM users","Configure VPCs"],1,"Logs Insights provides a purpose-built query language to search, filter, and analyze log data interactively in CloudWatch."),
+      tq("A CloudWatch metric represents:",["A log entry","A time-ordered set of data points published to CloudWatch","An IAM policy","A VPC configuration"],1,"Metrics are time-ordered sequences of data points (like CPU utilization over time) that you can monitor and alarm on."),
+      tq("CloudWatch Events (now EventBridge) can trigger actions based on:",["Only manual input","Schedule expressions or AWS service state changes","Only CloudTrail events","Only EC2 metrics"],1,"CloudWatch Events/EventBridge can trigger actions based on scheduled cron expressions or changes in AWS service state."),
+      tq("To monitor custom application metrics, you use:",["Only built-in CloudWatch metrics","CloudWatch PutMetricData API to publish custom metrics","Only X-Ray","Only CloudTrail"],1,"The PutMetricData API lets you publish your own custom metrics (like active users or queue depth) to CloudWatch."),
+      tq("CloudWatch Contributor Insights helps identify:",["Billing anomalies","Top contributors to high-cardinality metrics (top talkers, busiest URLs)","IAM policy violations","S3 storage growth"],1,"Contributor Insights analyzes log and metric data to find the top contributors — like which IPs generate the most traffic.")
+    ],
+    devops: [
+      tq("AWS CodePipeline automates:",["IAM user creation","Continuous integration and continuous delivery (CI/CD) pipelines","VPC configuration","S3 bucket creation"],1,"CodePipeline orchestrates the build, test, and deploy phases of your release process every time there is a code change."),
+      tq("AWS CodeBuild is a:",["Source control service","Fully managed build service that compiles code, runs tests, and produces artifacts","Deployment service","Monitoring service"],1,"CodeBuild compiles source code, runs tests, and produces software packages ready for deployment, all fully managed."),
+      tq("AWS CodeDeploy supports deploying to:",["Only EC2 instances","EC2, Lambda, ECS, and on-premises servers","Only Lambda functions","Only containers"],1,"CodeDeploy automates code deployments to EC2 instances, Lambda functions, ECS services, and on-premises servers."),
+      tq("Blue/green deployments reduce risk by:",["Deploying to the same servers","Running two identical production environments and switching traffic","Deploying one server at a time","Rolling back automatically"],1,"Blue/green maintains two environments — deploy to the inactive one, test it, then switch traffic, enabling instant rollback."),
+      tq("Infrastructure as Code (IaC) means:",["Manually configuring servers","Defining and provisioning infrastructure through machine-readable definition files","Only using the AWS Console","Writing application code"],1,"IaC treats infrastructure configuration as software — version controlled, tested, and deployed through automated processes."),
+      tq("CloudFormation drift detection identifies:",["Cost anomalies","Resources whose actual configuration differs from the template","Security vulnerabilities","Performance bottlenecks"],1,"Drift detection compares actual resource configurations to the expected CloudFormation template state, highlighting manual changes."),
+      tq("A canary deployment strategy:",["Deploys to all servers at once","Sends a small percentage of traffic to the new version first","Stops all traffic during deployment","Only deploys during maintenance windows"],1,"Canary deployments shift a small initial percentage of traffic to the new version, monitor for errors, then gradually shift the rest.")
+    ],
+    ml: [
+      tq("Amazon SageMaker is used for:",["Managing EC2 instances","Building, training, and deploying machine learning models","Creating VPCs","Managing IAM policies"],1,"SageMaker provides a fully managed platform to build, train, tune, and deploy machine learning models at scale."),
+      tq("Amazon Bedrock provides access to:",["EC2 instance types","Foundation models from leading AI companies through a single API","S3 storage classes","VPC configurations"],1,"Bedrock is a fully managed service offering foundation models from AI21 Labs, Anthropic, Meta, and Amazon through a unified API."),
+      tq("Overfitting in machine learning means:",["The model performs well on all data","The model memorizes training data but fails to generalize to new data","The model is too simple","The model trains too quickly"],1,"Overfitting occurs when a model learns the training data too well, including noise, and performs poorly on unseen data."),
+      tq("Feature engineering involves:",["Deploying models to production","Transforming raw data into features that better represent the underlying problem","Managing AWS accounts","Creating IAM policies"],1,"Feature engineering is the process of selecting, creating, and transforming input variables to improve model performance."),
+      tq("Amazon Comprehend provides:",["Image recognition","Natural language processing (NLP) capabilities like sentiment analysis","Speech recognition","Video analysis"],1,"Comprehend uses NLP to extract insights from text, including sentiment, entities, key phrases, and language detection."),
+      tq("Amazon Rekognition is used for:",["Text analysis","Image and video analysis including facial recognition and object detection","Speech synthesis","Data warehousing"],1,"Rekognition provides deep learning-based image and video analysis for tasks like facial recognition and object detection."),
+      tq("Responsible AI practices include:",["Using any data without consideration","Ensuring fairness, transparency, and privacy in AI systems","Maximizing model accuracy at all costs","Ignoring bias in training data"],1,"Responsible AI focuses on fairness, explainability, privacy, safety, and accountability in AI system design and deployment.")
+    ],
+    cost: [
+      tq("AWS Cost Explorer provides:",["Real-time EC2 monitoring","Historical spending analysis with forecasting capabilities","IAM policy management","VPC configuration"],1,"Cost Explorer offers interactive visualization of your AWS spending patterns over time with filtering and forecasting features."),
+      tq("Reserved Instance utilization reports help you:",["Launch new instances","Identify unused or underutilized reserved capacity","Create IAM users","Configure security groups"],1,"RI utilization reports show how effectively your Reserved Instances are being used, helping identify waste or opportunities to purchase more."),
+      tq("AWS Trusted Advisor checks for:",["Only security issues","Cost optimization, performance, security, fault tolerance, and service limits","Only billing errors","Only compliance violations"],1,"Trusted Advisor provides recommendations across five categories: cost optimization, performance, security, fault tolerance, and service limits."),
+      tq("Right-sizing recommendations suggest:",["Always using the largest instance","Matching instance types and sizes to actual workload requirements","Using only Spot Instances","Terminating all instances"],1,"Right-sizing analyzes your usage patterns and recommends optimal instance types and sizes to reduce costs without sacrificing performance."),
+      tq("AWS Organizations consolidated billing provides:",["Separate bills per account","A single bill for all accounts with potential volume discounts","Free AWS usage","Unlimited budgets"],1,"Consolidated billing combines usage across all accounts in an organization, potentially qualifying for volume pricing discounts.")
+    ]
+  };
+  // Match topic to pool
+  var matched = [];
+  if (t.match(/compute|ec2|instance|elb|load balanc|auto scal|elastic/)) matched = matched.concat(pools.compute);
+  if (t.match(/network|vpc|subnet|gateway|route|dns|connect|cdn|cloudfront|peering/)) matched = matched.concat(pools.networking);
+  if (t.match(/storage|s3|ebs|efs|glacier|backup|object/)) matched = matched.concat(pools.storage);
+  if (t.match(/security|iam|encrypt|kms|guard|inspect|shield|waf|complian|audit|identity|access/)) matched = matched.concat(pools.security);
+  if (t.match(/database|rds|dynamo|aurora|redis|cache|redshift|sql/)) matched = matched.concat(pools.database);
+  if (t.match(/serverless|lambda|api gateway|step func|event/)) matched = matched.concat(pools.serverless);
+  if (t.match(/monitor|cloudwatch|cloudtrail|log|x-ray|observ|metric|alarm/)) matched = matched.concat(pools.monitoring);
+  if (t.match(/devops|pipeline|deploy|ci\/cd|codebuild|codedeploy|cloudformation|cdk|container|ecs|eks|docker|automat|terraform|infra/)) matched = matched.concat(pools.devops);
+  if (t.match(/ml|machine learn|ai|sagemaker|bedrock|model|neural|data scien|prompt|nlp|vision|responsible/)) matched = matched.concat(pools.ml);
+  if (t.match(/cost|pricing|bill|budget|saving|tcl|tco|free tier|reserve/)) matched = matched.concat(pools.cost);
+  if (t.match(/disaster|recovery|backup|failover|ha |high avail|resilien|reliable/)) {
+    matched = matched.concat(pools.compute.slice(0,3));
+    matched = matched.concat(pools.database.slice(0,3));
+  }
+  if (t.match(/exam|review|practice|prep|full|final|certification/)) {
+    matched = matched.concat(pools.compute.slice(0,2));
+    matched = matched.concat(pools.networking.slice(0,2));
+    matched = matched.concat(pools.security.slice(0,2));
+    matched = matched.concat(pools.serverless.slice(0,2));
+    matched = matched.concat(pools.monitoring.slice(0,1));
+  }
+  // Fallback: mix from all pools
+  if (matched.length < 5) {
+    var allPools = Object.keys(pools);
+    for (var p = 0; p < allPools.length && matched.length < 10; p++) {
+      matched = matched.concat(pools[allPools[p]].slice(0, 2));
+    }
+  }
+  return matched.length >= 5 ? matched : generateGenericTrialQs(topic);
+}
+
+function generateGenericTrialQs(topic) {
+  return [
+    tq("Which AWS service is most relevant to " + topic + "?",["Amazon EC2","AWS Lambda","Amazon S3","Depends on the specific use case"],3,"The best service depends on the specific requirements — AWS offers purpose-built services for different workloads."),
+    tq("What is a key best practice for " + topic + "?",["Use the largest instance type available","Follow the principle of least privilege and automation","Avoid using managed services","Deploy everything in a single AZ"],1,"Following least privilege and leveraging automation are foundational best practices across all AWS domains."),
+    tq("How does the Well-Architected Framework relate to " + topic + "?",["It doesn't relate at all","All six pillars provide guidance relevant to this domain","Only the cost pillar applies","Only the security pillar applies"],1,"The Well-Architected Framework's six pillars provide comprehensive guidance applicable to all AWS workloads and domains."),
+    tq("What is a primary benefit of using AWS managed services for " + topic + "?",["Higher costs","Reduced operational overhead and built-in best practices","Less control over your data","Slower performance"],1,"Managed services reduce operational burden by handling patching, scaling, backups, and infrastructure management."),
+    tq("When studying " + topic + " for an AWS exam, you should prioritize:",["Memorizing every API parameter","Understanding concepts, use cases, and when to choose each service","Reading only blog posts","Watching only YouTube videos"],1,"AWS exams test conceptual understanding and the ability to select appropriate services for given scenarios.")
+  ];
+}
+
+// ═══ QUEST TRIAL SYSTEM ═══
+var currentTrialData = null;
+var trialQIdx = 0;
+var trialScore = 0;
+var trialAnswered = false;
+var trialQuestKey = '';
+var trialQuestXp = 0;
+var trialQuestGear = '';
+var trialQuestName = '';
+var trialIsSide = false;
+var trialQuestions = [];
+
+function openQuestTrial(qkey, qxp, qgear, questName, isSide, examId, dungeonId, questType, questIndex) {
+  trialQuestKey = qkey;
+  trialQuestXp = qxp;
+  trialQuestGear = qgear;
+  trialQuestName = questName;
+  trialIsSide = isSide;
+  trialQIdx = 0;
+  trialScore = 0;
+  trialAnswered = false;
+  trialQuestions = getTrialQuestions(examId, dungeonId, questType, questIndex);
+  // Shuffle questions
+  var seed = hashStr(qkey + Date.now().toString());
+  trialQuestions = shuffleWithSeed(trialQuestions, seed).slice(0, 5);
+  var overlay = document.getElementById('quest-trial-overlay');
+  overlay.classList.add('active');
+  renderTrialIntro();
+}
+window.openQuestTrial = openQuestTrial;
+
+function closeQuestTrial() {
+  document.getElementById('quest-trial-overlay').classList.remove('active');
+}
+window.closeQuestTrial = closeQuestTrial;
+
+function renderTrialIntro() {
+  var tc = document.getElementById('quest-trial-content');
+  var prefix = trialIsSide ? '⚡ Side Quest Trial' : '⚔️ Quest Trial';
+  var subtitle = trialIsSide ? 'Answer 5 questions to claim this side quest reward.' : 'Prove your knowledge before claiming your reward, adventurer.';
+  tc.innerHTML =
+    '<div class="text-center" style="margin-top:15vh;">' +
+      '<div class="text-6xl mb-4 pulse">📜</div>' +
+      '<h2 class="font-display text-2xl md:text-3xl mb-2" style="color:var(--gold);text-shadow:0 0 20px rgba(212,160,23,0.4);">' + prefix + '</h2>' +
+      '<p class="font-display text-base md:text-lg mb-3" style="color:var(--fire);">' + trialQuestName + '</p>' +
+      '<p class="font-body italic text-sm mb-6" style="color:var(--parchment-dark);">"' + subtitle + '"</p>' +
+      '<div class="panel p-4 mb-6 inline-block" style="max-width:400px;">' +
+        '<p class="text-sm" style="color:var(--parchment);">📖 Answer <span style="color:var(--gold-bright);">3 of 5</span> questions correctly to pass.</p>' +
+        '<p class="text-xs mt-2" style="color:var(--parchment-dark);">Score 5/5 for a <span style="color:var(--gold-bright);">+50 XP Perfect Trial bonus!</span></p>' +
+      '</div>' +
+      '<div><button class="boss-btn pulse" id="btn-start-trial">🗡️ Begin the Trial</button></div>' +
+    '</div>';
+  document.getElementById('btn-start-trial').addEventListener('click', function() { renderTrialQuestion(); });
+}
+
+function shuffleAnswers(opts, correct, seed) {
+  var indexed = opts.map(function(o, i) { return {text: o, orig: i}; });
+  seed = (seed || (Date.now() + Math.floor(Math.random()*9999))) | 0;
+  for (var m = indexed.length - 1; m > 0; m--) {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    var j = seed % (m + 1);
+    var tmp = indexed[m]; indexed[m] = indexed[j]; indexed[j] = tmp;
+  }
+  var newCorrect = 0;
+  for (var k = 0; k < indexed.length; k++) { if (indexed[k].orig === correct) { newCorrect = k; break; } }
+  return { opts: indexed.map(function(x) { return x.text; }), correct: newCorrect };
+}
+
+function renderTrialQuestion() {
+  if (trialQIdx >= 5) { renderTrialResults(); return; }
+  trialAnswered = false;
+  var q = trialQuestions[trialQIdx];
+  // Shuffle answer choices each render for variety
+  var _sh = shuffleAnswers(q.opts, q.correct, (Date.now() + trialQIdx * 997) | 0);
+  var _shOpts = _sh.opts;
+  var _shCorrect = _sh.correct;
+  var tc = document.getElementById('quest-trial-content');
+  tc.innerHTML =
+    '<div style="margin-top:8vh;">' +
+      '<div class="flex items-center justify-between mb-4">' +
+        '<p class="font-display text-sm" style="color:var(--gold);">⚔️ Trial Question ' + (trialQIdx + 1) + ' of 5</p>' +
+        '<span class="trial-score-bar">Score: ' + trialScore + ' / ' + (trialQIdx) + '</span>' +
+      '</div>' +
+      '<div class="xp-bar-outer mb-4" style="height:8px;"><div class="xp-bar-inner" style="width:' + (trialQIdx * 20) + '%;"></div></div>' +
+      '<div class="panel p-5 mb-6"><p class="font-body text-lg" style="color:var(--parchment);">' + q.q + '</p></div>' +
+      '<div class="flex flex-col gap-3" id="trial-answers">' +
+        _shOpts.map(function(o, i) { return '<button class="trial-answer-btn" data-ans="' + i + '" data-iscorrect="' + (i===_shCorrect?'1':'0') + '">' + String.fromCharCode(65 + i) + '. ' + o + '</button>'; }).join('') +
+      '</div>' +
+      buildTrialItemBar() +
+      '<div id="trial-feedback" class="mt-4 text-center" style="display:none;"></div>' +
+      '<div id="trial-next" class="mt-4 text-center" style="display:none;"><button class="btn-primary" id="btn-trial-next">' + (trialQIdx < 4 ? 'Next Question →' : 'See Results →') + '</button></div>' +
+    '</div>';
+  document.querySelectorAll('#trial-answers .trial-answer-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (trialAnswered) return;
+      trialAnswered = true;
+      var ans = parseInt(this.getAttribute('data-ans'));
+      var correct = ans === _shCorrect;
+      if (correct) { trialScore++; this.classList.add('correct'); }
+      else { this.classList.add('wrong'); }
+      document.querySelectorAll('#trial-answers .trial-answer-btn').forEach(function(b) {
+        b.classList.add('disabled');
+        if (parseInt(b.getAttribute('data-ans')) === _shCorrect) b.classList.add('correct');
+      });
+      var fb = document.getElementById('trial-feedback');
+      fb.style.display = 'block';
+      fb.innerHTML = correct
+        ? '<p style="color:#4caf50;" class="font-display text-sm">✅ Correct! Well done, adventurer!</p><p class="text-xs mt-1" style="color:var(--parchment-dark);">' + q.explain + '</p>'
+        : '<p style="color:#ef5350;" class="font-display text-sm">❌ Not quite.</p><p class="text-xs mt-1" style="color:var(--parchment-dark);">' + q.explain + '</p>';
+      document.getElementById('trial-next').style.display = 'block';
+      document.getElementById('btn-trial-next').addEventListener('click', function() {
+        trialQIdx++;
+        renderTrialQuestion();
+      });
+    });
+  });
+}
+
+function renderTrialResults() {
+  var passed = trialScore >= 3;
+  var perfect = trialScore === 5;
+  var xpEarned = passed ? trialQuestXp : 0;
+  var bonusXp = perfect ? 50 : 0;
+  var tc = document.getElementById('quest-trial-content');
+  if (passed) {
+    tc.innerHTML =
+      '<div class="text-center trial-victory" style="margin-top:12vh;">' +
+        '<div class="text-7xl mb-4">' + (perfect ? '🌟' : '🏆') + '</div>' +
+        '<h2 class="font-display text-3xl md:text-4xl mb-2" style="color:var(--gold);text-shadow:0 0 30px rgba(212,160,23,0.5);">⚔️ Trial Passed!</h2>' +
+        '<p class="font-body text-xl mb-2" style="color:var(--parchment);">Score: ' + trialScore + ' / 5</p>' +
+        (perfect ? '<p class="font-display text-base mb-2" style="color:var(--gold-bright);">🌟 PERFECT TRIAL! +50 Bonus XP!</p>' : '') +
+        '<p class="font-body text-lg mb-1" style="color:var(--fire);">+' + (xpEarned + bonusXp) + ' XP Earned</p>' +
+        (trialQuestGear ? '<p class="font-body text-sm mb-4" style="color:var(--gold-bright);">🎁 Gear Acquired!</p>' : '<div class="mb-4"></div>') +
+        '<p class="font-body italic text-sm mb-6" style="color:var(--parchment-dark);">"The knowledge is yours, adventurer."</p>' +
+        '<button class="btn-primary" id="btn-trial-claim">🏆 Claim Your Reward →</button>' +
+      '</div>';
+    document.getElementById('btn-trial-claim').addEventListener('click', function() {
+      setQuestState(trialQuestKey, 'complete');
+      gainXP(xpEarned + bonusXp);
+      if (trialQuestGear) { addGear(trialQuestGear); }
+      saveState();
+      closeQuestTrial();
+      renderQuests();
+    });
+  } else {
+    tc.innerHTML =
+      '<div class="text-center" style="margin-top:12vh;">' +
+        '<div class="text-7xl mb-4">💀</div>' +
+        '<h2 class="font-display text-3xl mb-2" style="color:var(--blood);text-shadow:0 0 20px rgba(139,0,0,0.5);">💀 Trial Failed</h2>' +
+        '<p class="font-body text-xl mb-2" style="color:var(--parchment);">Score: ' + trialScore + ' / 5</p>' +
+        '<p class="font-body text-sm mb-2" style="color:var(--parchment-dark);">You need at least 3 correct answers to pass.</p>' +
+        '<p class="font-body italic text-sm mb-6" style="color:var(--fire);">No XP is awarded for failure. Study more and return.</p>' +
+        '<div class="flex flex-col gap-3 items-center">' +
+          '<button class="btn-secondary" id="btn-trial-study" style="padding:12px 24px;">📖 Study Again</button>' +
+          '<button class="btn-primary" id="btn-trial-retry">⚔️ Retry Trial</button>' +
+        '</div>' +
+      '</div>';
+    document.getElementById('btn-trial-study').addEventListener('click', function() {
+      closeQuestTrial();
+    });
+    document.getElementById('btn-trial-retry').addEventListener('click', function() {
+      trialQIdx = 0;
+      trialScore = 0;
+      trialAnswered = false;
+      var seed = hashStr(trialQuestKey + Date.now().toString());
+      trialQuestions = shuffleWithSeed(trialQuestions, seed);
+      renderTrialQuestion();
+    });
+  }
+}
+
+// Wire trial close button
+document.getElementById('trial-close-btn').addEventListener('click', closeQuestTrial);
+
+function makeDungeon(id,name,emoji,lr,topic,bn,be,bl,mq,sq,bq){
+  return {id:id,name:name,emoji:emoji,levelRange:lr,topic:topic,bossName:bn,bossEmoji:be,bossLore:bl,mainQuests:mq,sideQuests:sq,bossQuestions:bq};
+}
+function mq(n,f,l,x,g,u){return {name:n,flavor:f,lesson:l,xp:x,gear:g||null,lessonUrl:u||null};}
+function sq(n,f,l,x,u){return {name:n,flavor:f,lesson:l,xp:x,lessonUrl:u||null};}
+function bq(q,o,c,e){return {q:q,opts:o,correct:c,explain:e};}
+
+var CLF_URL = "https://explore.skillbuilder.aws/learn/course/external/view/elearning/134/aws-cloud-practitioner-essentials";
+var ACI_URL = "https://awscloudinstitute.skillbuilder.aws/";
+var DOCS_URL = "https://docs.aws.amazon.com/index.html";
+var CAT_URL = "https://explore.skillbuilder.aws/learn/catalog";
+
+var EXAMS = {};
+
+EXAMS['clf']={name:"Cloud Practitioner",code:"CLF-C02",emoji:"⛅",tier:"INITIATE",diff:1,flavor:"Begin your journey into the Cloud Realm",dungeons:[
+  makeDungeon(1,"The Goblin Caves","🕯️","1-15","Cloud Concepts & Global Infra","Ignoramus the Cloud-Blind Goblin King","👺","A wretched creature who denies the very existence of the cloud.",
+    [mq("Slay the Myth of On-Premises","The dark wizard of legacy infrastructure has cast doubt upon the cloud. You must venture forth and prove that the cloud is real, powerful, and transformative. Study the sacred models of IaaS, PaaS, and SaaS, and learn the five essential characteristics that define true cloud computing.","AWS Cloud Practitioner Essentials – Cloud Concepts",100,"cloud_scroll",CLF_URL),mq("Map the Realms of AWS","Chart the Regions, Availability Zones, and Edge Locations. The cloud realm spans the entire globe, and understanding its geography is essential to wielding its power effectively.","AWS Global Infrastructure Overview",120,null,CLF_URL),mq("The Pact of Shared Responsibility","Understand the sacred treaty between AWS and its customers. This ancient pact defines who protects what — a critical distinction that will be tested again and again on your journey.","AWS Shared Responsibility Model",100,null,CLF_URL),mq("The Well-Architected Compendium","The six pillars — Operational Excellence, Security, Reliability, Performance Efficiency, Cost Optimization, and Sustainability — form the foundation of every great cloud architecture. Study them deeply.","AWS Well-Architected Framework",110,"cf_tome",CLF_URL),mq("The Global Reach Decree","Learn how CloudFront, Route 53, and Edge Locations accelerate the realm. The cloud's power grows with its global reach — understand how data travels the world in milliseconds.","AWS Global Services & Edge",90,null,CLF_URL)],
+    [sq("The Free Tier Treasure Hunt","Explore what riches AWS offers for free. Many adventurers don't realize the bounty available without spending a single gold coin.","aws.amazon.com/free",80,"https://aws.amazon.com/free/"),sq("The Six Advantages Scroll","Memorize the six advantages of cloud computing. These sacred words appear on every trial and must be recited from memory.","AWS Cloud Value Framework",60,CLF_URL)],
+    [bq("What best defines cloud computing?",["On-demand delivery of IT resources via internet with pay-as-you-go","Owning physical servers","A software license","A type of operating system"],0,"Cloud computing is the on-demand delivery of IT resources over the internet with pay-as-you-go pricing."),bq("What is an AWS Region?",["A single data center","A collection of VPCs","A geographic area with 2+ Availability Zones","An IAM boundary"],2,"A Region is a geographic area containing multiple Availability Zones for redundancy."),bq("On-demand self-service means:",["You own the servers","Users provision resources without human interaction","AWS manages your OS","Pay annually upfront"],1,"On-demand self-service means customers can provision compute resources as needed without human interaction."),bq("AWS is responsible for which under the shared responsibility model?",["Customer data","OS patching on EC2","Security OF the cloud infrastructure","Application firewalls"],2,"AWS manages security OF the cloud — the hardware, software, networking, and facilities."),bq("Which support plan includes a Technical Account Manager?",["Basic","Developer","Business","Enterprise"],3,"Only the Enterprise support plan includes a dedicated Technical Account Manager (TAM).")]
+  ),
+  makeDungeon(2,"The Dark Fortress","🏰","16-30","Core AWS Services","EC2-ron the Compute Colossus","⚙️","A titan forged from elastic compute power, scaling infinitely.",
+    [mq("Conjure the Elastic Warrior","Summon EC2 instances and master their types and lifecycle. The Elastic Warrior is the backbone of AWS compute — understanding its many forms and pricing models is essential for any cloud adventurer.","EC2 Instance Operations",150,"ec2_gauntlets",CAT_URL),mq("Build the Network Labyrinth","Construct VPCs, subnets, and routing tables. Every cloud fortress needs walls, gates, and secret passages — the VPC is how you build them all.","VPC Architecture and Design",150,"vpc_amulet",CAT_URL),mq("The Sacred Book of S3","Learn the ways of object storage, buckets, and access control. S3 is the infinite vault of the cloud — master its storage classes and you command the realm's most versatile service.","Amazon S3 Getting Started",140,null,CAT_URL),mq("The Lambda Summoning Basics","Invoke your first serverless functions. Lambda runs your code without servers — learn how events trigger it, how it scales, and why the cloud realm calls it the ultimate spell of automation.","AWS Lambda Getting Started",130,"lambda_cloak",CAT_URL),mq("The Great Database Taxonomy","Learn to choose between RDS, DynamoDB, ElastiCache, and Redshift. Each database serves a different purpose — the wise adventurer matches the service to the workload.","AWS Database Essentials",120,"rds_orb",CAT_URL)],
+    [sq("The IAM Initiation Ritual","Create users, groups, and policies in the realm of identity. No adventurer can proceed without proper credentials.","IAM & Access Control",100,CLF_URL),sq("Peer into RDS","Understand relational databases in the cloud. The structured data vaults of RDS hold the kingdom's most organized treasures.","Amazon RDS Getting Started",90,CAT_URL)],
+    [bq("Which EC2 pricing model is best for unpredictable workloads?",["Reserved","Spot","On-Demand","Dedicated Host"],2,"On-Demand instances are best for unpredictable workloads with no upfront commitment."),bq("What does a VPC provide?",["A physical server","An isolated virtual network within AWS","A storage service","A DNS service"],1,"A VPC provides a logically isolated section of the AWS cloud."),bq("S3 stores data as:",["Blocks","Files","Objects","Tables"],2,"S3 is an object storage service — data is stored as objects within buckets."),bq("IAM policies are attached to:",["S3 buckets only","Users, groups, and roles","EC2 instances only","VPCs"],1,"IAM policies can be attached to users, groups, and roles to grant permissions."),bq("RDS Multi-AZ deployments provide:",["Lower cost","Automatic failover for high availability","Faster read performance","Global distribution"],1,"Multi-AZ deployments automatically failover to a standby replica in another AZ.")]
+  ),
+  makeDungeon(3,"The Dragon's Lair","🐉","31-45","Security & Identity","Malachar the Compliance Lich","💀","An undead sorcerer of regulations and audit trails.",
+    [mq("The IAM Grimoire","Master permission boundaries, SCPs, and cross-account roles. The IAM Grimoire contains the deepest secrets of identity and access management — who can do what, where, and under which conditions.","IAM Advanced Concepts",175,"iam_sigil",CLF_URL),mq("Seal the Data Vault","Encrypt data at rest and in transit using KMS and ACM. Without encryption, your data is exposed to dark forces. Learn to seal every vault with unbreakable ciphers.","Data Protection with AWS",180,null,CAT_URL),mq("The Compliance Crusade","Learn AWS Config, Security Hub, and compliance frameworks. The Compliance Lich demands perfect audit trails — only those who master monitoring and compliance will survive.","AWS Security & Compliance",170,"security_aegis",CAT_URL),mq("The GuardDuty Watch-Post","Deploy GuardDuty to detect threats in VPC Flow Logs, CloudTrail, and DNS. A realm without watchers falls to silent invaders. Learn how intelligent threat detection protects the kingdom automatically.","AWS GuardDuty & Threat Detection",160,null,CAT_URL),mq("The Detective's Codex","Investigate incidents with AWS Detective, Amazon Macie, and Amazon Inspector. The best defenders understand exactly what happened and why.","AWS Detective & Inspector",155,"kms_key",CAT_URL)],
+    [sq("Shield of the Realm","Study AWS Shield and WAF to block dark forces. The realm's defenses begin at the network edge.","AWS Shield & WAF",120,DOCS_URL),sq("The MFA Oath","Enable multi-factor authentication. A single password is never enough to protect the kingdom's gates.","AWS MFA Best Practices",110,CLF_URL)],
+    [bq("Which service provides hardware-level MFA?",["IAM","AWS KMS","AWS CloudHSM","AWS Shield"],2,"CloudHSM provides hardware security modules for key management."),bq("KMS is used to:",["Monitor API calls","Manage encryption keys","Scan for vulnerabilities","Track costs"],1,"AWS KMS creates and manages cryptographic keys for data encryption."),bq("AWS Shield Standard protects against:",["SQL injection","DDoS attacks","Malware","Data breaches"],1,"AWS Shield Standard provides DDoS protection for all AWS customers at no cost."),bq("An S3 bucket policy is a type of:",["Identity-based policy","Resource-based policy","Permission boundary","Service control policy"],1,"S3 bucket policies are resource-based policies attached directly to S3 buckets."),bq("AWS Config helps you:",["Deploy applications","Track resource configuration changes over time","Create VPCs","Monitor EC2 performance"],1,"AWS Config continuously monitors and records AWS resource configurations.")]
+  ),
+  makeDungeon(4,"The Underdark","💀","46-60","Pricing, Billing & Support","Greedmaw the Cost Demon","💰","A demon who feeds on wasted cloud spend and hidden fees.",
+    [mq("The Ledger of Eternal Bills","Navigate Cost Explorer, Budgets, and cost allocation tags. Greedmaw grows stronger with every dollar wasted — learn to track every coin to starve the demon.","AWS Billing & Pricing",200,null,CLF_URL),mq("The Pricing Scrolls","Understand On-Demand, Reserved, Spot, and Savings Plans. The pricing scrolls reveal the secret to saving up to 90% on your cloud spend — if you choose wisely.","AWS Pricing Models",190,"s3_satchel",CLF_URL),mq("TCO: The True Cost Oracle","Calculate total cost of ownership for cloud migration. The Oracle reveals the hidden costs of on-premises infrastructure that many organizations overlook.","AWS Pricing Calculator",185,null,"https://calculator.aws/"),mq("The Support Tiers Tablet","Decipher the sacred tiers of AWS Support: Basic, Developer, Business, and Enterprise. Each tier unlocks more powerful allies — the TAM of the Enterprise tier is the most coveted advisor in the realm.","AWS Support Plans Overview",165,null,CLF_URL),mq("The Organizations Mandate","Learn AWS Organizations, consolidated billing, and SCPs. When many accounts unite under one banner, the realm grows stronger. Learn the art of multi-account management.","AWS Organizations & Control Tower",175,"iam_sigil",CLF_URL)],
+    [sq("Savings Plan Sorcery","Compare Savings Plans vs Reserved Instances. Both offer savings, but their flexibility differs greatly.","AWS Savings Plans",140,DOCS_URL),sq("The Free Tier Map","Discover what's always free vs 12-month free vs trial. Not all free things are created equal — some expire.","AWS Free Tier",120,"https://aws.amazon.com/free/")],
+    [bq("Spot Instances are best for:",["Critical production databases","Stateless, fault-tolerant workloads","Development environments","Predictable steady-state workloads"],1,"Spot Instances offer up to 90% savings but can be interrupted."),bq("AWS Budgets allows you to:",["Deploy EC2 instances","Set custom cost and usage alerts","Create IAM policies","Configure VPC routing"],1,"AWS Budgets lets you set custom budgets and receive alerts."),bq("Which support plan offers 24/7 access to Cloud Support Engineers?",["Basic","Developer","Business","Personal"],2,"The Business support plan offers 24/7 access to Cloud Support Engineers."),bq("Cost allocation tags help with:",["Improving EC2 performance","Encrypting S3 data","Tracking and organizing costs by project or team","Managing IAM users"],2,"Cost allocation tags let you organize AWS costs by project, team, or environment."),bq("The AWS Free Tier '12 months free' starts from:",["Account creation","First EC2 launch","First billing cycle","Annual renewal"],0,"The 12-month free tier period begins on the date you create your AWS account.")]
+  ),
+  makeDungeon(5,"The Lich's Tower","☠️","61-80","AWS Technology & Services","The Well-Architected Wraith","👻","A phantom born from the six pillars of architectural wisdom.",
+    [mq("The Lambda Invocation Ritual","Master serverless computing and event-driven architecture. Lambda is the ultimate spell — code that runs without servers, triggered by the events of the realm itself.","Serverless Computing Essentials",220,"lambda_cloak",CAT_URL),mq("The Watcher's Eye","Set up CloudWatch alarms, metrics, and CloudTrail. The Watcher sees all — every API call, every metric spike, every anomaly in the cloud realm.","CloudWatch & Monitoring",215,"cloudwatch_eye",CAT_URL),mq("Database of Destinies","Choose between RDS, DynamoDB, ElastiCache, and Redshift. Each database serves a different destiny — choose the wrong one and your application crumbles.","Choosing the Right AWS Database",220,null,CAT_URL),mq("The Messaging Arcana","Master SQS, SNS, and EventBridge. Decoupled systems survive — tightly coupled systems crumble. The messaging layer keeps the realm's services talking without creating dangerous dependencies.","AWS Messaging & Integration",210,"sqs_horn",CAT_URL),mq("The Migration Cartographer's Guild","Chart the 7 Rs of migration: Retire, Retain, Rehost, Replatform, Repurchase, Refactor, Relocate. Every journey from on-premises to cloud follows one of these ancient paths.","AWS Cloud Migration Strategies",205,"network_compass",CAT_URL)],
+    [sq("The Auto Scaling Army","Configure Auto Scaling Groups and Launch Templates. An army that grows and shrinks with demand is an army that never falls.","AWS Auto Scaling",160,CAT_URL),sq("Route 53: The Cartographer's Quest","Learn DNS routing policies. The Cartographer maps every domain name to its destination across the cloud realm.","Amazon Route 53",150,CAT_URL)],
+    [bq("What triggers a Lambda function?",["Only manual invocation","Events from services like S3, API Gateway, DynamoDB","Only scheduled cron jobs","HTTP requests only"],1,"Lambda functions can be triggered by events from many AWS services."),bq("DynamoDB is best described as:",["A relational SQL database","A serverless NoSQL key-value and document database","A data warehouse","A file storage service"],1,"DynamoDB is a fully managed, serverless NoSQL database."),bq("A CloudWatch Alarm can trigger:",["Only email notifications","Only Lambda functions","Auto Scaling actions, SNS notifications, or EC2 actions","Only CloudTrail events"],2,"CloudWatch Alarms can trigger Auto Scaling, SNS notifications, and more."),bq("Which service records API calls in your AWS account?",["CloudWatch","CloudTrail","Config","X-Ray"],1,"AWS CloudTrail records all API calls made in your account."),bq("Elastic Load Balancing distributes traffic across:",["Multiple AWS accounts","Multiple EC2 instances or containers across AZs","Multiple Regions only","Multiple VPCs only"],1,"ELB distributes incoming traffic across targets across Availability Zones.")]
+  ),
+  makeDungeon(6,"The Final Citadel","⚡","81-100","Full Exam Preparation","The CLF Certification Titan","⚡","The ultimate guardian of Cloud Practitioner knowledge.",
+    [mq("The Grand Review Tome","Complete the full Cloud Practitioner Essentials course. The Grand Review covers everything — from cloud concepts to billing, security to architecture. Leave no page unturned.","AWS Cloud Practitioner Essentials – All Modules",300,"practitioner_ring",CLF_URL),mq("Trial of the Practice Scrolls","Complete the official CLF-C02 practice question set. The practice scrolls simulate the real trial — study every explanation, even for answers you get right.","Official Practice Questions: CLF-C02",280,null,"https://explore.skillbuilder.aws/learn/course/external/view/elearning/14050/aws-certified-cloud-practitioner-official-practice-question-set-clf-c02-english"),mq("The Well-Architected Ritual","Study the 6 pillars of the Well-Architected Framework. The six pillars are the foundation of every great cloud architecture — master them and you master the cloud.","AWS Well-Architected Framework",260,"cert_crown","https://explore.skillbuilder.aws/learn/course/external/view/elearning/1042/aws-well-architected"),mq("The Service Encyclopedia","Review the complete AWS service catalog by category: Compute, Storage, Database, Networking, Security, Analytics, ML/AI, and Management. An adventurer who knows every service cannot be tricked by the exam's illusions.","AWS Services Overview",240,"cloud_scroll",CLF_URL),mq("The Timed War Games","Complete three full timed practice exams simulating real CLF-C02 conditions: 65 questions in 90 minutes. Stamina and time management are skills forged only through repeated battle.","CLF-C02 Practice Exam Simulator",250,null,"https://explore.skillbuilder.aws/learn/course/external/view/elearning/14050/aws-certified-cloud-practitioner-official-practice-question-set-clf-c02-english")],
+    [sq("The Flashcard Gauntlet","Create and review flashcards for all 60+ AWS services. Repetition forges memory into steel.","AWS CLF-C02 Flashcards",200,CAT_URL),sq("The Community Tavern","Join the AWS certification community and answer questions. Teaching others is the highest form of mastery.","AWS Certification Forums",180,"https://repost.aws/")],
+    [bq("The Well-Architected Framework pillar focused on running workloads effectively is:",["Security","Operational Excellence","Reliability","Performance Efficiency"],1,"Operational Excellence focuses on running and monitoring systems."),bq("Which service enables running containers without managing servers?",["EC2","ECS","AWS Fargate","Elastic Beanstalk"],2,"AWS Fargate is a serverless compute engine for containers."),bq("Amazon Aurora is:",["A NoSQL database","A MySQL/PostgreSQL-compatible relational database with 5x performance","A data lake service","An in-memory cache"],1,"Aurora is cloud-native, compatible with MySQL and PostgreSQL, offering up to 5x MySQL performance."),bq("Under the Shared Responsibility Model, who patches the guest OS on EC2?",["AWS","The Customer","AWS Support","AWS Config"],1,"For EC2 (IaaS), the customer is responsible for patching the guest OS."),bq("Which service runs code at CloudFront edge locations?",["CloudFront","Lambda@Edge","Route 53","Direct Connect"],1,"Lambda@Edge lets you run Lambda functions at CloudFront edge locations.")]
+  )
+]};
+
+EXAMS['soa']={name:"CloudOps Engineer - Associate",code:"SOA-C03",emoji:"⚙️",tier:"JOURNEYMAN",diff:3,flavor:"Automate, monitor, and operate the cloud realm with precision",dungeons:[
+  makeDungeon(1,"The Watchtower","🕯️","1-15","Domain 1: Monitoring, Logging, Analysis & Remediation (22%)","Logmaster the Blind Watcher","👁️","This ancient sentinel sees everything — yet understands nothing.",
+    [{name:"Light the Signal Fires of CloudWatch",flavor:"The realm is dark without metrics. Learn to create CloudWatch alarms, dashboards, and composite alarms.",lesson:"Amazon CloudWatch Getting Started",xp:150,gear:"cloudwatch_eye",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/199/amazon-cloudwatch-getting-started",bullets:["Understand CloudWatch metrics, namespaces, and dimensions","Create CloudWatch Alarms and Composite Alarms across accounts","Build dashboards that aggregate metrics across multiple Regions","Use CloudWatch Anomaly Detection for dynamic thresholds"]},{name:"Decipher the Scroll of CloudTrail",flavor:"Every API call leaves a trace. Master CloudTrail to audit the realm's events.",lesson:"AWS CloudTrail Getting Started",xp:140,gear:null,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/1010/aws-cloudtrail-getting-started",bullets:["Enable CloudTrail across all Regions and accounts","Understand management events vs data events vs Insights events","Send CloudTrail logs to CloudWatch Logs for alerting","Use EventBridge rules to trigger Lambda for auto-remediation"]},{name:"The Systems Manager Grimoire",flavor:"Use Systems Manager to patch, run commands, and automate operations.",lesson:"AWS Systems Manager Getting Started",xp:160,gear:null,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/1132/aws-systems-manager-getting-started",bullets:["Use SSM Session Manager for secure shell access without bastion hosts","Configure Patch Manager to automate OS patching","Create SSM Automation runbooks for self-healing operations","Understand Parameter Store vs Secrets Manager"]},{name:"The EventBridge Loom",flavor:"Weave automated responses to infrastructure events using Amazon EventBridge rules and targets.",lesson:"Amazon EventBridge Getting Started",xp:150,gear:"cloudwatch_eye",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/1815/amazon-eventbridge-getting-started",bullets:["Create EventBridge rules matching CloudTrail API events","Trigger Lambda functions, SSM Automation, or SNS from rules","Use EventBridge Pipes for point-to-point integrations","Understand event buses: default, custom, and partner"]},{name:"The Observability Codex",flavor:"Unify metrics, logs, and traces into a single pane of glass for complete operational visibility.",lesson:"AWS Observability Best Practices",xp:145,gear:null,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/199/amazon-cloudwatch-getting-started",bullets:["Enable CloudWatch Container Insights for ECS/EKS","Use CloudWatch Logs Insights for SQL-like log analysis","Deploy CloudWatch Synthetics canaries for endpoint monitoring","Build cross-account dashboards with CloudWatch cross-account observability"]}],
+    [{name:"The Insight Runes of AWS Config",flavor:"Track every configuration change across the realm.",lesson:"AWS Config Getting Started",xp:90,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/1158/aws-config-getting-started"},{name:"X-Ray Vision",flavor:"Trace distributed requests through your microservices.",lesson:"AWS X-Ray Getting Started",xp:80,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/1017/aws-x-ray-getting-started"}],
+    [bq("Which CloudWatch feature detects unusual metric patterns automatically?",["Composite Alarms","Anomaly Detection","Contributor Insights","Metric Math"],1,"CloudWatch Anomaly Detection uses ML to create dynamic baselines."),bq("To stream CloudTrail events to a Lambda for auto-remediation, you should use:",["S3 event notifications","CloudTrail Insights","Amazon EventBridge rules","CloudWatch Synthetics"],2,"EventBridge can match CloudTrail API events and trigger Lambda functions."),bq("Which Systems Manager feature provides interactive shell access without opening port 22?",["Run Command","Session Manager","Patch Manager","Automation"],1,"SSM Session Manager provides secure shell access without SSH."),bq("CloudWatch Contributor Insights helps you:",["Automate patching","Identify the top contributors to high-cardinality metrics","Create custom dashboards","Monitor Lambda cold starts"],1,"Contributor Insights finds the top talkers in your log data."),bq("Which AWS Config feature applies a set of managed Config rules across an organization?",["Config Aggregators","Conformance Packs","Config Rules","Remediation Actions"],1,"Conformance Packs bundle multiple Config rules and remediation actions.")]
+  ),
+  makeDungeon(2,"The Fortress of Uptime","🏰","16-30","Domain 2: Reliability & Business Continuity (22%)","Failovrak the Single-Point Demon","💀","This demon thrives on single points of failure.",
+    [{name:"The Ritual of High Availability",flavor:"Architect Multi-AZ deployments and Auto Scaling Groups. Failovrak grows stronger with every single point of failure — defeat it with redundancy.",lesson:"Amazon EC2 Auto Scaling Getting Started",xp:180,gear:"ec2_gauntlets",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/1124/amazon-ec2-auto-scaling-getting-started",bullets:["Configure ASG Target Tracking, Step, Simple, and Scheduled Scaling policies","Understand scale-in protection and lifecycle hooks","Deploy RDS Multi-AZ for automatic database failover (1-2 min RTO)","Use ELB health checks to route only to healthy instances","Understand health check grace period and instance warmup"]},{name:"Disaster Recovery Scrolls",flavor:"Master the four DR strategies by RTO and cost. The Fortress of Uptime demands you know the difference between Pilot Light and Warm Standby.",lesson:"Disaster Recovery of Workloads on AWS",xp:190,gear:"rds_orb",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/1913/disaster-recovery-of-workloads-on-aws-recovery-in-the-cloud",bullets:["Backup & Restore: highest RPO/RTO, lowest cost — use for non-critical workloads","Pilot Light: minimal core always running (replicated DB), scale up during recovery","Warm Standby: scaled-down version always running, scale to prod during recovery","Multi-Site Active/Active: lowest RTO, highest cost — for mission-critical workloads","Configure AWS Backup for centralized cross-service backup management"]},{name:"The Route 53 Failover Enchantment",flavor:"Configure Route 53 health checks and failover routing to make the realm self-healing.",lesson:"Amazon Route 53 Getting Started",xp:170,gear:"route53_map",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/66/amazon-route-53-getting-started",bullets:["Configure Route 53 health checks for HTTP/HTTPS/TCP endpoints","Implement active-passive failover with primary and secondary records","Understand DNS TTL impact — low TTL = faster failover, more DNS queries","Use CloudWatch metrics to trigger Route 53 health check state changes","Cross-region failover with Aurora Global Database for sub-minute RTO"]},{name:"The Resilience Architecture Scrolls",flavor:"Design fault-tolerant architectures using multi-AZ patterns, circuit breakers, and chaos engineering principles.",lesson:"Reliability Pillar – AWS Well-Architected Framework",xp:185,gear:"ec2_gauntlets",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/1913/disaster-recovery-of-workloads-on-aws-recovery-in-the-cloud",bullets:["Apply SQS dead-letter queues for decoupled error isolation","Configure Elastic Load Balancer connection draining during scale-in","Use S3 Object Lock for WORM compliance in backup scenarios","Implement EBS Multi-Attach for shared storage high availability"]},{name:"The DynamoDB Point-in-Time Rite",flavor:"Configure DynamoDB PITR, global tables, and on-demand backups for NoSQL resilience.",lesson:"Amazon DynamoDB Getting Started",xp:165,gear:"dynamo_hammer",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/1013/amazon-dynamodb-getting-started",bullets:["Enable PITR (35-day continuous backup window) on DynamoDB tables","Configure DynamoDB Global Tables for multi-region active-active","Understand DynamoDB on-demand vs provisioned capacity and auto-scaling","Use DynamoDB Streams to trigger Lambda on table changes"]}],
+    [{name:"Aurora's Resilience Ritual",flavor:"Learn Aurora Serverless v2 auto-scaling and Global Database cross-region replication.",lesson:"Amazon Aurora Getting Started",xp:100,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/953/amazon-rds-service-primer"},{name:"The RDS Proxy Portal",flavor:"Reduce failover time and absorb connection spikes with RDS Proxy.",lesson:"Amazon RDS Service Primer",xp:90,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/953/amazon-rds-service-primer"}],
+    [bq("Which DR strategy has the lowest RTO but highest cost?",["Backup & Restore","Pilot Light","Warm Standby","Multi-Site Active/Active"],3,"Multi-Site Active/Active gives near-zero RTO at the highest cost."),bq("RDS Proxy improves reliability by:",["Automatically restoring backups","Pooling database connections to reduce failover time","Adding read replicas","Encrypting data at rest"],1,"RDS Proxy maintains a pool of connections and reduces failover time."),bq("Which Auto Scaling policy adjusts capacity based on a target metric value?",["Step Scaling","Simple Scaling","Target Tracking","Scheduled Scaling"],2,"Target Tracking keeps a metric at your target value automatically."),bq("Aurora Global Database enables:",["Multi-AZ within a single region","Cross-region replication with sub-second lag","Automatic schema migration","DynamoDB compatibility"],1,"Aurora Global Database replicates across up to 5 regions."),bq("AWS Backup provides:",["EC2 Auto Scaling only","A centralized service to manage and automate backups across multiple AWS services","RDS snapshots only","S3 versioning only"],1,"AWS Backup manages and automates backups for EC2, RDS, DynamoDB, EFS, S3, and more.")]
+  ),
+  makeDungeon(3,"The Automation Forge","🐉","31-45","Domain 3: Deployment, Provisioning & Automation (22%)","Manualkron the Manual Deployer","🔨","This ancient dragon deploys every server by hand, click by agonizing click.",
+    [{name:"The CloudFormation Codex",flavor:"Master CloudFormation stacks, nested stacks, StackSets, and Change Sets. Manualkron despises infrastructure as code — prove him obsolete.",lesson:"Introduction to AWS CloudFormation",xp:200,gear:"cf_tome",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/482/introduction-to-aws-cloudformation",bullets:["Understand template sections: Resources, Parameters, Outputs, Conditions, Mappings","Use Change Sets to preview changes before applying them to production stacks","Detect and remediate CloudFormation drift on live stacks","Deploy StackSets across multiple accounts and regions via AWS Organizations","Use cfn-init and cfn-signal for EC2 instance bootstrapping"]},{name:"The CDK Summoning Ritual",flavor:"Conjure infrastructure with real programming languages using the AWS CDK.",lesson:"AWS Cloud Development Kit (CDK) Primer",xp:190,gear:null,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/18/aws-cloud-development-kit-cdk-primer",bullets:["Understand CDK App → Stack → Construct hierarchy","Know L1 (Cfn), L2 (intent-based), and L3 (patterns) construct levels","Run cdk synth to generate CloudFormation template","Use cdk diff before deploying to preview changes","CDK Pipelines enable self-mutating CI/CD pipelines from code"]},{name:"Summon the Container Army",flavor:"Deploy containerized workloads with ECS on Fargate and manage images in ECR.",lesson:"Amazon ECS Getting Started",xp:210,gear:"eks_plate",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/751/amazon-elastic-container-service-ecs-getting-started",bullets:["Write ECS Task Definitions (image, CPU, memory, networking mode, IAM task role)","Run Tasks as Services with desired count and auto-scaling","Choose EC2 vs Fargate launch types based on control vs simplicity","Push/pull container images from Amazon ECR with lifecycle policies","EKS: know managed node groups vs Fargate profiles for Kubernetes on AWS"]},{name:"The CodeDeploy Deployment Strategies",flavor:"Master Blue/Green, Canary, and Linear deployment strategies to deploy with zero downtime.",lesson:"CI/CD on AWS",xp:195,gear:"pipe_belt",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/2559/cicd-on-aws",bullets:["CodeDeploy Blue/Green: shift traffic between old (blue) and new (green) environments","Canary: send small % of traffic first, then shift all after a bake period","Linear: increment traffic in equal steps at equal intervals","Use CodeDeploy deployment hooks (BeforeInstall, AfterInstall, ApplicationStart, ValidateService)","Understand AppSpec.yml for Lambda and ECS deployments"]},{name:"The Secrets Vault Protocols",flavor:"Automate secret rotation and manage configuration at scale with Secrets Manager and Parameter Store.",lesson:"AWS Security Fundamentals",xp:180,gear:"kms_key",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/48/security-fundamentals-second-edition",bullets:["Configure Secrets Manager Lambda rotation functions for RDS, Redshift, and DocumentDB","Use Parameter Store hierarchies (e.g. /prod/db/password) with IAM path conditions","Understand SecureString in Parameter Store vs Secrets Manager rotation capability","Reference Secrets Manager secrets from ECS Task Definitions and Lambda env vars"]}],
+    [{name:"The CodePipeline Pathway",flavor:"Forge an automated CI/CD pipeline with CodeCommit, CodeBuild, CodeDeploy, and CodePipeline.",lesson:"CI/CD on AWS",xp:110,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/2559/cicd-on-aws"},{name:"The Elastic Beanstalk Shortcut",flavor:"Deploy and manage applications without managing infrastructure using Elastic Beanstalk.",lesson:"AWS Elastic Beanstalk Getting Started",xp:100,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/895/aws-elastic-beanstalk-getting-started"}],
+    [bq("Which CloudFormation feature deploys stacks to multiple accounts and regions?",["Nested Stacks","StackSets","Change Sets","Stack Policies"],1,"StackSets deploy stacks across multiple accounts and regions."),bq("In AWS CDK, an L2 construct is:",["A raw CloudFormation resource","A higher-level construct with sensible defaults","A CDK application","A CDK pipeline stage"],1,"L2 constructs provide sensible defaults and helper methods."),bq("Which ECS launch type means you do not manage EC2 servers?",["EC2","External","Fargate","EKS"],2,"Fargate is a serverless compute engine for containers."),bq("CloudFormation Drift Detection identifies:",["Security vulnerabilities","Resources whose actual configuration differs from the template","Cost optimization opportunities","Unused stacks"],1,"Drift detection finds manual changes made outside of CloudFormation."),bq("Which service stores and manages container images?",["S3","CodeArtifact","Amazon ECR","AWS Artifact"],2,"ECR is a fully managed container registry.")]
+  ),
+  makeDungeon(4,"The Vault of Compliance","💀","46-60","Domain 4: Security & Compliance (16%)","Malachar the Compliance Lich","🧟","The Lich guards ancient secrets of identity, encryption, and threat detection.",
+    [{name:"The IAM Sovereignty Ritual",flavor:"Master IAM roles, permission boundaries, SCPs, and cross-account access patterns.",lesson:"AWS IAM Getting Started",xp:220,gear:"iam_sigil",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/120/aws-identity-and-access-management-iam-getting-started",bullets:["Create IAM roles for EC2 Instance Profiles, Lambda execution, and cross-account access","Use permission boundaries to limit what delegated administrators can grant","Apply SCPs via AWS Organizations to enforce account-level guardrails","Implement IAM Access Analyzer to find external resource sharing and generate least-privilege policies","Understand the policy evaluation logic: explicit deny > SCP > permission boundary > identity > resource"]},{name:"Seal the Vault with KMS and Secrets Manager",flavor:"Master KMS key policies, envelope encryption, and automatic secret rotation.",lesson:"AWS Security Fundamentals",xp:210,gear:"kms_key",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/48/security-fundamentals-second-edition",bullets:["Understand AWS Managed Keys vs Customer Managed Keys (CMKs)","Configure automatic annual key rotation for CMKs","Implement envelope encryption: CMK encrypts data key, data key encrypts data","Use Secrets Manager for automatic credential rotation (RDS, API keys)","Differentiate SSM Parameter Store SecureString (cheaper, no rotation) vs Secrets Manager"]},{name:"Summon the GuardDuty Sentinels",flavor:"Deploy intelligent threat detection and centralized security findings.",lesson:"AWS Security Fundamentals",xp:200,gear:"security_aegis",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/48/security-fundamentals-second-edition",bullets:["Enable GuardDuty across all accounts via AWS Organizations delegated admin","Understand GuardDuty finding types: Recon, UnauthorizedAccess, CryptoCurrency, Trojan","Use Security Hub to aggregate findings from GuardDuty, Inspector, Macie, Config, and Firewall Manager","Amazon Inspector for EC2 and ECR vulnerability scanning (CIS benchmarks, CVEs)","Amazon Macie for sensitive data discovery (PII, credentials) in S3 buckets"]},{name:"The IAM Access Analyzer Grimoire",flavor:"Use IAM Access Analyzer to detect resources shared externally and generate least-privilege policies from CloudTrail.",lesson:"AWS IAM Getting Started",xp:190,gear:"iam_sigil",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/120/aws-identity-and-access-management-iam-getting-started",bullets:["Enable Access Analyzer in each region to find external sharing of S3, KMS, Lambda, SQS","Use Access Analyzer to generate least-privilege IAM policies from CloudTrail activity logs","Understand the difference: external access findings vs unused access findings","Respond to Access Analyzer findings with archive, resolve, or remediate actions"]},{name:"The Network Firewall Citadel",flavor:"Deploy AWS Network Firewall for stateful deep packet inspection and centralized egress filtering.",lesson:"AWS Security Fundamentals",xp:175,gear:"cf_tome",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/48/security-fundamentals-second-edition",bullets:["Deploy AWS Network Firewall in a dedicated inspection VPC with Transit Gateway","Create stateful rules for domain filtering (allow/deny specific FQDNs)","Use AWS Firewall Manager to centrally deploy WAF rules and Security Groups across accounts","Understand AWS Shield Advanced for DDoS protection with cost protection and response team access"]}],
+    [{name:"The WAF Ward",flavor:"Protect applications with AWS WAF Web ACLs, rate-based rules, and managed rule groups.",lesson:"AWS WAF Getting Started",xp:110,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/1456/aws-waf-getting-started"},{name:"The ACM Certificate Scroll",flavor:"Provision and auto-renew TLS/SSL certificates with AWS Certificate Manager.",lesson:"AWS Security Fundamentals",xp:100,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/48/security-fundamentals-second-edition"}],
+    [bq("What is the purpose of an IAM Permission Boundary?",["It grants extra permissions","It sets the maximum permissions an IAM entity can have","It replaces resource-based policies","It encrypts IAM credentials"],1,"A permission boundary sets the maximum permissions an IAM entity can have."),bq("GuardDuty detects threats by analyzing:",["CloudFormation templates","VPC Flow Logs, CloudTrail logs, and DNS logs","IAM policy documents","S3 bucket contents"],1,"GuardDuty analyzes VPC Flow Logs, CloudTrail events, and DNS query logs."),bq("Envelope encryption means:",["Encrypting a key with another key","Using SSL certificates for data in transit","Applying multiple S3 bucket policies","Rotating credentials every 90 days"],0,"Envelope encryption encrypts a data key with a master key."),bq("AWS Organizations SCPs apply to:",["IAM users in the management account only","All principals in member accounts","S3 bucket policies across the org","Lambda execution roles only"],1,"SCPs restrict what all IAM principals within member accounts can do."),bq("Which service scans EC2 instances and containers for software vulnerabilities?",["GuardDuty","Macie","AWS Inspector","Security Hub"],2,"Inspector automatically scans for software vulnerabilities.")]
+  ),
+  makeDungeon(5,"The Network Labyrinth","☠️","61-80","Domain 5: Networking & Content Delivery (18%)","Vexnar the Routing Wraith","🌐","This wraith haunts tangled routes, dead-end subnets, and broken peering connections.",
+    [{name:"The Advanced VPC Cartography",flavor:"Chart Transit Gateway, PrivateLink, VPC Endpoints, and hybrid network topology.",lesson:"AWS Networking Basics",xp:250,gear:"vpc_amulet",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/499/aws-networking-basics",bullets:["Design multi-tier VPCs: public (ALB), private (app), isolated (DB) subnets","Transit Gateway: hub-and-spoke for hundreds of VPCs — supports transitive routing","VPC Peering: direct non-transitive, non-overlapping CIDR connections between VPCs","Interface Endpoints (PrivateLink): ENI-based private access to 100+ AWS services","Gateway Endpoints: free, route-table-based private access to S3 and DynamoDB only","Security Groups (stateful, instance level) vs NACLs (stateless, subnet level)"]},{name:"The CloudFront Conjuration",flavor:"Accelerate global delivery with CloudFront distributions, cache policies, and edge compute.",lesson:"Amazon CloudFront Getting Started",xp:230,gear:"network_compass",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/348/amazon-cloudfront-getting-started",bullets:["Configure CloudFront distributions with S3, ALB, or custom HTTP origins","Implement cache policies (TTL) and perform cache invalidations","Restrict S3 access with Origin Access Control (OAC) — only CloudFront can read S3","Run Lambda@Edge at 4 event types: viewer request, viewer response, origin request, origin response","CloudFront Functions for lightweight edge logic (header manipulation, URL rewrites)","Global Accelerator: static Anycast IPs routing to optimal endpoints over AWS backbone"]},{name:"Bridge the Realms with Hybrid Networking",flavor:"Connect on-premises networks to AWS via Site-to-Site VPN and Direct Connect.",lesson:"AWS Hybrid Networking",xp:240,gear:null,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/1101/aws-hybrid-networking",bullets:["Site-to-Site VPN: encrypted IPsec tunnels over public internet, quick to provision","Direct Connect: dedicated private connection, 1Gbps/10Gbps, consistent throughput","Direct Connect + VPN: Direct Connect for primary, VPN for failover","Transit Gateway with Site-to-Site VPN: attach VPN connections to TGW for centralized hybrid routing","Route 53 Resolver Inbound/Outbound Endpoints for bidirectional hybrid DNS resolution"]},{name:"The API Gateway Arts",flavor:"Build and secure REST, HTTP, and WebSocket APIs with Amazon API Gateway for serverless and container backends.",lesson:"Amazon API Gateway Getting Started",xp:220,gear:"lambda_cloak",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/1134/amazon-api-gateway-getting-started",bullets:["Understand REST API vs HTTP API vs WebSocket API: cost and feature tradeoffs","Implement usage plans, API keys, and throttling for rate limiting","Use Lambda authorizers (TOKEN and REQUEST type) for custom auth","Configure VPC Link to connect API Gateway to private NLB/ALB targets","Enable API Gateway caching with TTL to reduce backend invocations"]},{name:"The Accelerated Network Tome",flavor:"Maximize network performance with Global Accelerator, CloudFront Origins, and Elastic Fabric Adapter.",lesson:"Amazon CloudFront Getting Started",xp:210,gear:"network_compass",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/348/amazon-cloudfront-getting-started",bullets:["AWS Global Accelerator: static Anycast IPs, routes to nearest healthy endpoint over AWS backbone","Compare Global Accelerator (TCP/UDP, non-HTTP) vs CloudFront (HTTP/HTTPS, cacheable content)","S3 Transfer Acceleration for fast cross-region S3 uploads via edge locations","Elastic Fabric Adapter (EFA) for low-latency HPC and ML training workloads","Placement Groups: Cluster (low latency), Partition (large distributed), Spread (max isolation)"]}],
+    [{name:"The Load Balancer Brotherhood",flavor:"Master ALB (L7 content routing), NLB (L4 high performance), and GWLB (inline appliances).",lesson:"Elastic Load Balancing Getting Started",xp:130,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/1121/elastic-load-balancing-elb-getting-started"},{name:"The Route 53 Routing Tome",flavor:"Master all Route 53 routing policies: Failover, Latency, Geolocation, Weighted, Multivalue.",lesson:"AWS Networking Basics",xp:120,lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/499/aws-networking-basics"}],
+    [bq("Which service connects multiple VPCs through a central hub?",["VPC Peering","PrivateLink","Transit Gateway","Direct Connect"],2,"Transit Gateway acts as a cloud router for hub-and-spoke networking."),bq("A VPC Gateway Endpoint is used for:",["Connecting via VPN","Privately accessing S3 and DynamoDB","Creating a NAT gateway","Peering two VPCs"],1,"Gateway Endpoints provide private connectivity to S3 and DynamoDB."),bq("Security Groups vs Network ACLs?",["SGs are stateless; NACLs are stateful","SGs are stateful; NACLs are stateless","Both are stateless","Both are stateful"],1,"Security Groups are stateful; NACLs are stateless."),bq("Lambda@Edge runs code:",["Only in us-east-1","At CloudFront edge locations closest to users","Only inside a VPC","In response to SQS messages only"],1,"Lambda@Edge executes at CloudFront edge locations globally."),bq("AWS Direct Connect provides:",["Encrypted VPN tunnels over the internet","A dedicated private network connection from on-premises to AWS","DNS resolution for hybrid environments","S3 Transfer Acceleration"],1,"Direct Connect provides a dedicated private network connection.")]
+  ),
+  makeDungeon(6,"The Final Citadel","⚡","81-100","SOA-C03 Full Exam Preparation","The CloudOps Certification Titan","⚡","The ultimate trial. The Titan tests all five domains simultaneously.",
+    [{name:"The Grand SOA-C03 Review",flavor:"Review all five domains with their correct exam weights before the ultimate trial.",lesson:"Exam Prep: AWS Certified CloudOps Engineer – Associate (SOA-C03)",xp:300,gear:"cert_crown",lessonUrl:"https://skillbuilder.aws/category/exam-prep/cloudops-engineer-associate",bullets:["Domain 1 (22%): CloudWatch metrics/alarms/dashboards, CloudTrail events, SSM Session Manager/Patch Manager/Automation/Parameter Store, Config Conformance Packs, X-Ray, EventBridge","Domain 2 (22%): RTO/RPO, 4 DR strategies, ASG scaling policies, RDS Multi-AZ vs Read Replica, Route 53 health checks/failover, AWS Backup, Aurora Global Database","Domain 3 (22%): CloudFormation Change Sets/Drift/StackSets, CDK L1/L2/L3, CodeDeploy Canary/Blue-Green, ECS Task Definitions/Fargate, ECR lifecycle policies","Domain 4 (16%): IAM Permission Boundaries/SCPs, KMS CMKs/envelope encryption, Secrets Manager rotation, GuardDuty/Inspector/Macie/Security Hub, WAF Web ACLs","Domain 5 (18%): Transit Gateway vs VPC Peering, Interface vs Gateway Endpoints, ALB vs NLB, CloudFront OAC/Lambda@Edge, Site-to-Site VPN vs Direct Connect, Route 53 routing policies"]},{name:"The Official Practice Gauntlet",flavor:"Test yourself with the official AWS SOA-C03 practice question set. You need 720/1000 to pass.",lesson:"Official Practice Questions: SOA-C03",xp:350,gear:"bedrock_staff",lessonUrl:"https://skillbuilder.aws/learn/6S13G6FCZA/aws-cloudops-engineer-curriculum-overview/U6HXMFG5R8",bullets:["Aim for 80%+ on practice sets before scheduling the real exam","Read ALL explanations — even for questions you got right","Focus extra study time on your lowest-scoring domain","Practice AWS Builder Labs on Skill Builder for hands-on experience","The exam has 50 scored + 15 unscored questions; 130 minutes total"]},{name:"The CloudOps War Room Simulation",flavor:"Simulate a real-world CloudOps incident from detection to remediation to post-mortem.",lesson:"AWS CloudOps Engineer Learning Plan",xp:280,gear:"devops_blade",lessonUrl:"https://skillbuilder.aws/learning-plan/BZJS8KQ916/aws-cloudops-engineer-learning-plan-includes-labs/8ZFKBMAMFH",bullets:["Practice the incident workflow: CloudWatch alarm → CloudTrail investigation → SSM runbook → EventBridge automation","Design self-healing architecture: EventBridge → Lambda → SSM Automation → Config remediation","Build a multi-account observability setup with cross-account CloudWatch","Write SSM Automation runbooks for common operational tasks","Review all 5 Operational Excellence pillar best practices in the Well-Architected Framework"]},{name:"The Service Limits Mandate",flavor:"Master AWS Service Quotas, Trusted Advisor, and Health Dashboard to proactively manage your operational posture.",lesson:"AWS Trusted Advisor Overview",xp:260,gear:"cloudwatch_eye",lessonUrl:"https://explore.skillbuilder.aws/learn/course/external/view/elearning/1158/aws-config-getting-started",bullets:["Use Service Quotas to view and request increases before hitting limits","Subscribe to AWS Health events (account-specific and public) via EventBridge","Trusted Advisor: Cost Optimization, Performance, Security, Fault Tolerance, Service Limits checks","Integrate Trusted Advisor findings into your ops dashboard for proactive action","Set up AWS Health Aware runbook pattern for automatic incident creation from health events"]},{name:"The Exam Ready Garrison",flavor:"Final preparation: complete all hands-on labs, timed practice sets, and review every domain with fresh eyes.",lesson:"SOA-C03 Exam Readiness",xp:320,gear:"cert_crown",lessonUrl:"https://skillbuilder.aws/learn/6S13G6FCZA/aws-cloudops-engineer-curriculum-overview/U6HXMFG5R8",bullets:["Complete all 5 AWS Builder Labs for SOA-C03 on Skill Builder","Take two full timed practice exams (720/1000 is passing)","Review your lowest-scoring domain with dedicated lab work","Understand all 5 domain weights: D1+D2+D3 (66%) are the highest-priority study targets","On exam day: flag uncertain questions, return to them, manage your 130 minutes"]}],
+    [{name:"The AWS CloudOps Learning Path",flavor:"Complete the official AWS CloudOps Engineer Learning Plan on Skill Builder, including hands-on labs.",lesson:"AWS CloudOps Engineer Learning Plan (Skill Builder)",xp:200,lessonUrl:"https://skillbuilder.aws/learning-plan/BZJS8KQ916/aws-cloudops-engineer-learning-plan-includes-labs/8ZFKBMAMFH"},{name:"The Flashcard Crucible",flavor:"Forge flashcards for every key service, difference, and scenario covered on SOA-C03.",lesson:"AWS Documentation",xp:180,lessonUrl:DOCS_URL}],
+    [bq("To automatically remediate non-compliant resources from AWS Config, use:",["Manual fixes","Config Rules with SSM Automation remediation actions","Delete and redeploy","CloudTrail to block API calls"],1,"Config supports automatic remediation via SSM Automation documents, triggering runbooks when non-compliance is detected."),bq("To patch EC2 instances in a private subnet without internet, use:",["An internet gateway","SSM VPC Interface Endpoints (ssm, ssmmessages, ec2messages)","A NAT instance and SSH","Direct Connect"],1,"SSM Agent communicates via VPC Interface Endpoints — deploy endpoints for ssm, ssmmessages, and ec2messages to enable SSM in private subnets."),bq("Best visibility into a multi-account environment?",["One CloudWatch dashboard per account","CloudWatch cross-account observability with a central monitoring account","CloudTrail in one region only","AWS Config in management account only"],1,"Cross-account observability lets you build unified dashboards, run Logs Insights queries, and set alarms spanning all your accounts from one place."),bq("To prevent any account from disabling GuardDuty, use:",["IAM policies in each account","An SCP blocking guardduty:DeleteDetector and guardduty:DisassociateFromMasterAccount","GuardDuty delegated admin only","CloudFormation drift detection"],1,"An SCP is the strongest guardrail — it prevents any principal in any member account from disabling GuardDuty, regardless of their IAM permissions."),bq("Which CodeDeploy strategy sends a small initial traffic slice to the new version then all remaining?",["AllAtOnce","HalfAtATime","Canary","Linear"],2,"Canary deployments shift a configurable small initial percentage (e.g., 10%) of traffic to the new Lambda version or EC2 instances, then all remaining traffic after a bake time.")]
+  )
+]};
+
+function genExam(id,name,code,emoji,tier,diff,flavor,topics,bosses){
+  var ds=[];
+  var dnames=["The Goblin Caves","The Dark Fortress","The Dragon's Lair","The Underdark","The Lich's Tower","The Final Citadel"];
+  var demojis=["🕯️","🏰","🐉","💀","☠️","⚡"];
+  var lrs=["1-15","16-30","31-45","46-60","61-80","81-100"];
+  var gearPool=["cloud_scroll","linen_tunic","vpc_amulet","iam_sigil","lambda_cloak","ec2_gauntlets","s3_satchel","cf_tome","eks_plate","rds_orb","pipe_belt","kms_key","bedrock_staff","cert_crown","devops_blade","security_aegis","ml_crown","network_compass","dynamo_hammer","sqs_horn","cloudwatch_eye","route53_map","aurora_gem"];
+  for(var i=0;i<6;i++){
+    var xpBase=100+i*40;
+    ds.push(makeDungeon(i+1,dnames[i],demojis[i],lrs[i],topics[i],bosses[i].n,bosses[i].e,bosses[i].l,
+      [mq("Study the "+topics[i]+" Scrolls","Delve deep into the ancient knowledge of "+topics[i]+".","AWS Skill Builder – "+topics[i],xpBase,gearPool[(i*3)%gearPool.length],CAT_URL),
+       mq("Practice the "+topics[i]+" Arts","Apply your knowledge through hands-on labs.","AWS "+code+" Lab – "+topics[i],xpBase+20,gearPool[(i*3+1)%gearPool.length],CAT_URL),
+       mq("Master "+topics[i],"Achieve mastery over all concepts in this domain.","AWS "+code+" Module "+(i+1),xpBase+10,null,CAT_URL)],
+      [sq("Side Quest: "+topics[i]+" Review","Review supplementary materials for this domain.","AWS Docs – "+topics[i],xpBase-30,DOCS_URL),
+       sq("Challenge: "+topics[i]+" Quiz","Test yourself with additional practice questions.","Practice Quiz – "+topics[i],xpBase-40,CAT_URL)],
+      [bq("Which AWS service is most relevant to "+topics[i]+"?",["Amazon EC2","AWS Lambda","Amazon S3","Depends on the specific use case"],3,"The best service depends on the specific requirements."),
+       bq("What is a key best practice for "+topics[i]+"?",["Use the largest instance type","Follow the principle of least privilege","Avoid automation","Use a single AZ"],1,"Following least privilege is a key best practice."),
+       bq("How does AWS support "+topics[i]+"?",["Through managed services and automation","Only through manual configuration","Only via third-party tools","AWS does not support this"],0,"AWS provides managed services and automation."),
+       bq("What is the primary benefit of AWS for "+topics[i]+"?",["Fixed pricing only","Scalability and flexibility","Physical server access","On-premises deployment"],1,"Scalability and flexibility are primary benefits."),
+       bq("Which Well-Architected pillar most relates to "+topics[i]+"?",["Cost Optimization","Security","Operational Excellence","All pillars are relevant"],3,"All Well-Architected pillars are relevant.")]
+    ));
+  }
+  EXAMS[id]={name:name,code:code,emoji:emoji,tier:tier,diff:diff,flavor:flavor,dungeons:ds};
+}
+
+genExam('aif','AI Practitioner','AIF-C01','🤖','INITIATE',1,'Harness the power of arcane intelligence',
+  ['AI/ML Concepts','Generative AI & LLMs','Prompt Engineering','Amazon Bedrock','Responsible AI','Full Exam Prep'],
+  [{n:"The Data-Blind Oracle",e:"🔮",l:"An oracle who sees patterns in chaos."},{n:"The Language Model Hydra",e:"🐍",l:"A multi-headed beast of token prediction."},{n:"The Prompt Puzzle Sphinx",e:"🦁",l:"Speaks only in riddles and few-shot examples."},{n:"The Bedrock Golem",e:"🗿",l:"An ancient construct powered by foundation models."},{n:"The Bias Demon",e:"👿",l:"A creature that corrupts all models with unfairness."},{n:"The AIF Certification Titan",e:"⚡",l:"The final guardian of AI Practitioner knowledge."}]);
+
+genExam('saa','Solutions Architect Associate','SAA-C03','🏗️','JOURNEYMAN',3,'Design great halls of infinite scale',
+  ['Architecture Foundations','Compute & Networking','Storage Deep Dive','Database & App Integration','Security & Cost Optimization','Full Exam Prep'],
+  [{n:"The Architecture Apparition",e:"👻",l:"A ghost of poorly designed systems past."},{n:"The Network Titan",e:"🗿",l:"A colossus woven from VPC subnets."},{n:"The Storage Sorcerer",e:"🧙",l:"Hoards data in infinite magical vaults."},{n:"The Schema Demon",e:"👿",l:"Corrupts databases with denormalization."},{n:"The Well-Architected Wyvern",e:"🐲",l:"Tests all against the six sacred pillars."},{n:"The SAA Certification Titan",e:"⚡",l:"The final guardian of Solutions Architect knowledge."}]);
+
+genExam('dva','Developer Associate','DVA-C02','💻','JOURNEYMAN',3,'Forge code in the fires of Lambda',
+  ['SDK & CLI Fundamentals','Serverless Development','API & App Integration','Auth & Security','CI/CD Pipelines','Full Exam Prep'],
+  [{n:"The Legacy Code Zombie",e:"🧟",l:"Shambles forward with deprecated functions."},{n:"The SAM Sentinel",e:"🤖",l:"Guards the serverless application model."},{n:"The API Basilisk",e:"🐍",l:"Its gaze turns REST calls to stone."},{n:"The Auth Basilisk",e:"🔐",l:"Locks down access with Cognito chains."},{n:"The CI/CD Dragon",e:"🐉",l:"Breathes continuous integration fire."},{n:"The DVA Certification Titan",e:"⚡",l:"The final guardian of Developer knowledge."}]);
+
+genExam('dea','Data Engineer Associate','DEA-C01','📊','JOURNEYMAN',3,'Tame the rivers of data flowing through the realm',
+  ['Data Ingestion & Transformation','Data Store Management','Data Operations & Pipelines','Data Security & Governance','Data Analysis & Visualization','Full Exam Prep'],
+  [{n:"The Stream Serpent",e:"🐍",l:"Slithers through Kinesis data streams."},{n:"The Glue Golem",e:"🗿",l:"A construct of ETL crawlers and jobs."},{n:"The Pipeline Phantom",e:"👻",l:"Haunts data workflows with silent failures."},{n:"The Governance Ghost",e:"👤",l:"Enforces data catalogs with spectral precision."},{n:"The Athena Oracle",e:"🔮",l:"Queries the data lake with ancient SQL."},{n:"The DEA Certification Titan",e:"⚡",l:"The final guardian of Data Engineer knowledge."}]);
+
+genExam('sap','Solutions Architect Professional','SAP-C02','🏛️','MASTER',5,'Architect empires that span continents',
+  ['Advanced Architecture Design','Multi-Account Strategy','Migration & Transfer','Cost & Performance Optimization','Disaster Recovery','Full Exam Prep'],
+  [{n:"The Complexity Colossus",e:"🗿",l:"A titan of multi-region architectures."},{n:"The Organization Overlord",e:"👑",l:"Rules all accounts with service control policies."},{n:"The Migration Lich",e:"💀",l:"Traps workloads in legacy dungeons."},{n:"The Cost Kraken",e:"🐙",l:"Drags budgets into the abyss."},{n:"The DR Dragon",e:"🐉",l:"Destroys primary regions with a single breath."},{n:"The SAP Certification Titan",e:"⚡",l:"The final guardian of SA Professional knowledge."}]);
+
+genExam('dop','DevOps Engineer Professional','DOP-C02','🔄','MASTER',5,'Automate the armies of deployment',
+  ['SDLC Automation','Configuration Management','Monitoring & Logging','Incident Response','Policies & Standards','Full Exam Prep'],
+  [{n:"The Pipeline Poltergeist",e:"👻",l:"Breaks builds at the merge gate."},{n:"The Config Chimera",e:"🐲",l:"Multi-headed beast of drift and entropy."},{n:"The Log Leviathan",e:"🐋",l:"Drowns teams in unstructured logs."},{n:"The Incident Imp",e:"👿",l:"Triggers cascading failures for fun."},{n:"The Policy Phantom",e:"👤",l:"Enforces standards with spectral SCPs."},{n:"The DOP Certification Titan",e:"⚡",l:"The final guardian of DevOps Pro knowledge."}]);
+
+genExam('ans','Advanced Networking Specialty','ANS-C01','🌐','ARCANE',4,'Weave the invisible threads of connectivity',
+  ['Network Design','Network Implementation','Network Management','Network Security','Network Automation','Full Exam Prep'],
+  [{n:"The Subnet Specter",e:"👻",l:"Haunts CIDR blocks with overlapping ranges."},{n:"The Transit Gateway Titan",e:"🗿",l:"Routes traffic across a thousand VPCs."},{n:"The Direct Connect Dragon",e:"🐉",l:"Guards the physical link to the cloud."},{n:"The Firewall Fiend",e:"🔥",l:"Burns packets that violate NACLs."},{n:"The Automation Apparition",e:"👤",l:"Scripts network changes with CloudFormation."},{n:"The ANS Certification Titan",e:"⚡",l:"The final guardian of Networking knowledge."}]);
+
+genExam('scs','Security Specialty','SCS-C02','🔒','ARCANE',4,'Guard the vaults against dark forces',
+  ['Incident Response','Logging & Monitoring','Infrastructure Security','Identity & Access Mgmt','Data Protection','Full Exam Prep'],
+  [{n:"The Breach Banshee",e:"👻",l:"Screams when GuardDuty finds anomalies."},{n:"The Audit Apparition",e:"👤",l:"Traces every API call through CloudTrail."},{n:"The Perimeter Paladin",e:"⚔️",l:"Defends with WAF rules and Shield."},{n:"The Identity Illithid",e:"🧠",l:"Mind-controls IAM with cross-account roles."},{n:"The Encryption Elemental",e:"🔥",l:"Guards KMS keys with elemental fury."},{n:"The SCS Certification Titan",e:"⚡",l:"The final guardian of Security knowledge."}]);
+
+genExam('mla','Machine Learning Associate','MLA-C01','🧠','JOURNEYMAN',3,'Teach golems to think and learn',
+  ['ML Fundamentals','Data Engineering for ML','Model Development','Model Deployment','ML Operations','Full Exam Prep'],
+  [{n:"The Overfitting Ogre",e:"👹",l:"Memorizes training data but fails on new input."},{n:"The Feature Fiend",e:"👿",l:"Corrupts datasets with missing values."},{n:"The Hyperparameter Hydra",e:"🐍",l:"Each head tunes a different parameter."},{n:"The Inference Imp",e:"👿",l:"Slows endpoint latency to a crawl."},{n:"The MLOps Minotaur",e:"🐂",l:"Guards the labyrinth of model pipelines."},{n:"The MLA Certification Titan",e:"⚡",l:"The final guardian of ML Associate knowledge."}]);
+
+genExam('dbs','Database Specialty','DBS-C01','🗄️','ARCANE',4,'Command the ancient vaults of data',
+  ['Database Design','Database Deployment','Database Management','Database Monitoring','Database Security','Full Exam Prep'],
+  [{n:"The Schema Specter",e:"👻",l:"Haunts databases with normalization nightmares."},{n:"The Replication Revenant",e:"💀",l:"Creates infinite read replicas."},{n:"The Backup Banshee",e:"👻",l:"Screams when snapshots expire."},{n:"The Performance Phantom",e:"👤",l:"Slows queries with missing indexes."},{n:"The Encryption Elemental",e:"🔥",l:"Guards data at rest and in transit."},{n:"The DBS Certification Titan",e:"⚡",l:"The final guardian of Database knowledge."}]);
+
+var EXAM_LIST = [
+  {id:'clf',emoji:'⛅',code:'CLF-C02',name:'Cloud Practitioner',diff:1,tier:'INITIATE',flavor:'"Begin your journey into the Cloud Realm"'},
+  {id:'aif',emoji:'🤖',code:'AIF-C01',name:'AI Practitioner',diff:1,tier:'INITIATE',flavor:'"Harness the power of arcane intelligence"'},
+  {id:'saa',emoji:'🏗️',code:'SAA-C03',name:'Solutions Architect Associate',diff:3,tier:'JOURNEYMAN',flavor:'"Design great halls of infinite scale"'},
+  {id:'dva',emoji:'💻',code:'DVA-C02',name:'Developer Associate',diff:3,tier:'JOURNEYMAN',flavor:'"Forge code in the fires of Lambda"'},
+  {id:'soa',emoji:'⚙️',code:'SOA-C03',name:'CloudOps Engineer - Associate',diff:3,tier:'JOURNEYMAN',flavor:'"Automate, monitor, and operate the cloud realm with precision"'},
+  {id:'dea',emoji:'📊',code:'DEA-C01',name:'Data Engineer Associate',diff:3,tier:'JOURNEYMAN',flavor:'"Tame the rivers of data flowing through the realm"'},
+  {id:'sap',emoji:'🏛️',code:'SAP-C02',name:'Solutions Architect Professional',diff:5,tier:'MASTER',flavor:'"Architect empires that span continents"'},
+  {id:'dop',emoji:'🔄',code:'DOP-C02',name:'DevOps Engineer Professional',diff:5,tier:'MASTER',flavor:'"Automate the armies of deployment"'},
+  {id:'ans',emoji:'🌐',code:'ANS-C01',name:'Advanced Networking Specialty',diff:4,tier:'ARCANE',flavor:'"Weave the invisible threads of connectivity"'},
+  {id:'scs',emoji:'🔒',code:'SCS-C02',name:'Security Specialty',diff:4,tier:'ARCANE',flavor:'"Guard the vaults against dark forces"'},
+  {id:'mla',emoji:'🧠',code:'MLA-C01',name:'Machine Learning Associate',diff:3,tier:'JOURNEYMAN',flavor:'"Teach golems to think and learn"'},
+  {id:'dbs',emoji:'🗄️',code:'DBS-C01',name:'Database Specialty',diff:4,tier:'ARCANE',flavor:'"Command the ancient vaults of data"'}
+];
+
+
+// ═══ SPELL SYSTEM ═══
+var CLASS_SPELLS={
+  archmage:[
+    {id:'sp_spark',   zone:1,name:'Arcane Spark', emoji:'✨',desc:'Eliminate 1 wrong answer.',          effect:'elim1',  charges:2},
+    {id:'sp_fireball',zone:2,name:'Fireball',      emoji:'🔥',desc:'Eliminate 2 wrong answers.',         effect:'elim2',  charges:2},
+    {id:'sp_mind',    zone:3,name:'Arcane Mind',   emoji:'🧠',desc:'Skip question, no penalty.',         effect:'skip',   charges:2},
+    {id:'sp_warp',    zone:4,name:'Time Warp',     emoji:'⏳',desc:'If wrong, retry once.',               effect:'retry',  charges:2},
+    {id:'sp_twin',    zone:5,name:'Twin Cast',     emoji:'⚡',desc:'Correct answer gives +30 bonus XP.',  effect:'dblxp',  charges:2},
+    {id:'sp_meteor',  zone:6,name:'Meteor Storm',  emoji:'☄️',desc:'Auto-answer correctly.',              effect:'auto',   charges:1}
+  ],
+  paladin:[
+    {id:'pa_smite',   zone:1,name:'Smite',         emoji:'⚔️',desc:'Eliminate 1 wrong answer.',          effect:'elim1',  charges:2},
+    {id:'pa_light',   zone:2,name:'Holy Light',    emoji:'🌟',desc:'Eliminate 2 wrong answers.',         effect:'elim2',  charges:2},
+    {id:'pa_shield',  zone:3,name:'Shield Wall',   emoji:'🛡️',desc:'Skip question, no penalty.',         effect:'skip',   charges:2},
+    {id:'pa_grace',   zone:4,name:'Divine Grace',  emoji:'✝️',desc:'If wrong, retry once.',               effect:'retry',  charges:2},
+    {id:'pa_sanct',   zone:5,name:'Sanctuary',     emoji:'🕊️',desc:'Correct answer gives +30 bonus XP.',  effect:'dblxp',  charges:2},
+    {id:'pa_radiance',zone:6,name:'Divine Radiance',emoji:'👑',desc:'Auto-answer correctly.',             effect:'auto',   charges:1}
+  ],
+  ranger:[
+    {id:'ra_shot',    zone:1,name:'Aimed Shot',    emoji:'🏹',desc:'Eliminate 1 wrong answer.',          effect:'elim1',  charges:2},
+    {id:'ra_volley',  zone:2,name:'Volley',        emoji:'💥',desc:'Eliminate 2 wrong answers.',         effect:'elim2',  charges:2},
+    {id:'ra_smoke',   zone:3,name:'Smoke Screen',  emoji:'💨',desc:'Skip question, no penalty.',         effect:'skip',   charges:2},
+    {id:'ra_trap',    zone:4,name:'Tripwire',      emoji:'🪤',desc:'If wrong, retry once.',               effect:'retry',  charges:2},
+    {id:'ra_strike',  zone:5,name:'Power Shot',    emoji:'🎯',desc:'Correct answer gives +30 bonus XP.',  effect:'dblxp',  charges:2},
+    {id:'ra_head',    zone:6,name:'Headshot',      emoji:'☠️',desc:'Auto-answer correctly.',              effect:'auto',   charges:1}
+  ],
+  diviner:[
+    {id:'di_pulse',   zone:1,name:'Neural Pulse',  emoji:'🧿',desc:'Eliminate 1 wrong answer.',          effect:'elim1',  charges:2},
+    {id:'di_prob',    zone:2,name:'Probability',   emoji:'📊',desc:'Eliminate 2 wrong answers.',         effect:'elim2',  charges:2},
+    {id:'di_skip',    zone:3,name:'Foresight',     emoji:'🔮',desc:'Skip question, no penalty.',         effect:'skip',   charges:2},
+    {id:'di_retrain', zone:4,name:'Retrain',       emoji:'🔄',desc:'If wrong, retry once.',               effect:'retry',  charges:2},
+    {id:'di_sing',    zone:5,name:'Singularity',   emoji:'🌌',desc:'Correct answer gives +30 bonus XP.',  effect:'dblxp',  charges:2},
+    {id:'di_omni',    zone:6,name:'Omniscience',   emoji:'⭐',desc:'Auto-answer correctly.',              effect:'auto',   charges:1}
+  ],
+  rogue:[
+    {id:'ro_pick',    zone:1,name:'Lockpick',      emoji:'🗝️',desc:'Eliminate 1 wrong answer.',          effect:'elim1',  charges:2},
+    {id:'ro_stab',    zone:2,name:'Backstab',      emoji:'🗡️',desc:'Eliminate 2 wrong answers.',         effect:'elim2',  charges:2},
+    {id:'ro_smoke',   zone:3,name:'Smoke Screen',  emoji:'💨',desc:'Skip question, no penalty.',         effect:'skip',   charges:2},
+    {id:'ro_feign',   zone:4,name:'Feign Death',   emoji:'💀',desc:'If wrong, retry once.',               effect:'retry',  charges:2},
+    {id:'ro_shadow',  zone:5,name:'Shadow Strike', emoji:'⚡',desc:'Correct answer gives +30 bonus XP.',  effect:'dblxp',  charges:2},
+    {id:'ro_kill',    zone:6,name:'Assassinate',   emoji:'☠️',desc:'Auto-answer correctly.',              effect:'auto',   charges:1}
+  ]
+};
+
+function spellForZone(classId,zone){
+  var list=CLASS_SPELLS[classId]||[];
+  for(var i=0;i<list.length;i++) if(list[i].zone===zone) return list[i];
+  return null;
+}
+function activeSpell(classId,zonesCleared){
+  var list=CLASS_SPELLS[classId]||[], best=null;
+  for(var i=0;i<list.length;i++) if(zonesCleared>=list[i].zone) best=list[i];
+  return best;
+}
+function spCharges(spellId){
+  if(!state.spellCharges) state.spellCharges={};
+  if(state.spellCharges[spellId]===undefined){
+    var sp=null,list=CLASS_SPELLS[state.classId]||[];
+    for(var i=0;i<list.length;i++) if(list[i].id===spellId){sp=list[i];break;}
+    state.spellCharges[spellId]=sp?sp.charges:0;
+  }
+  return state.spellCharges[spellId];
+}
+function useSpCharge(spellId){
+  var c=spCharges(spellId); if(c<=0) return false;
+  state.spellCharges[spellId]=c-1; saveState(); return true;
+}
+function refreshSpCharges(){
+  if(!state.classId) return;
+  if(!state.spellCharges) state.spellCharges={};
+  var zones=getDungeonsConquered(), list=CLASS_SPELLS[state.classId]||[];
+  list.forEach(function(s){ if(zones>=s.zone) state.spellCharges[s.id]=s.charges; });
+  saveState();
+}
+
+// ═══ STATE ═══
+var state = {
+  heroName:'',examId:'',classId:'',level:1,xp:0,
+  stats:{INT:10,WIS:10,DEX:10,CON:10,STR:10,CHA:10},
+  inventory:[],questsDone:{},questStates:{},dungeonsDone:[],currentDungeon:0,
+  bossAnswers:[],bossScore:0,bossQIdx:0,spellCharges:{},gold:0,shopScrolls:{firebolt:0}
+};
+
+function saveState(){
+  try{localStorage.setItem('awsQuestDungeonState',JSON.stringify(state));}catch(e){}
+  flashAutosave();
+}
+function loadState(){
+  try{
+    var s=localStorage.getItem('awsQuestDungeonState');
+    if(s){
+      var p=JSON.parse(s);
+      for(var k in p)state[k]=p[k];
+      if(!state.questStates) state.questStates={};
+      if(!state.spellCharges) state.spellCharges={};
+      if(state.questsDone){
+        for(var qk in state.questsDone){
+          if(state.questsDone[qk] && !state.questStates[qk]){
+            state.questStates[qk]='complete';
+          }
+        }
+      }
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
+function getStudyTips(examId, dungeonId, questType, questIndex) {
+  var key = examId + '_' + dungeonId + '_' + questType + questIndex;
+  if (STUDY_TIPS[key]) return STUDY_TIPS[key];
+  var exam = EXAMS[examId];
+  if (!exam) return ["Review the official AWS documentation for this topic"];
+  var d = null;
+  for (var i = 0; i < exam.dungeons.length; i++) {
+    if (exam.dungeons[i].id === dungeonId) { d = exam.dungeons[i]; break; }
+  }
+  if (!d) return ["Study the relevant AWS documentation"];
+  return getGenericStudyTips(d.topic, questType === 'm');
+}
+
+// ═══ PAGE NAV ═══
+function showPage(id){
+  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
+  var el=document.getElementById(id);
+  if(el)el.classList.add('active');
+}
+window.showPage=showPage;
+
+// ═══ XP & LEVEL ═══
+function xpToNext(lv){return lv*120;}
+function gainXP(amount){
+  if(!state.gold) state.gold=0;
+  state.gold += Math.floor(amount / 3);
+  var oldLevel = state.level;
+  state.xp+=amount;
+  while(state.xp>=xpToNext(state.level)){
+    state.xp-=xpToNext(state.level);
+    state.level++;
+  }
+  var newLevel = state.level;
+  saveState();
+  if (newLevel > oldLevel) {
+    showLevelUp(null, oldLevel, newLevel);
+  }
+}
+function showLevelUp(gearName, oldLevel, newLevel){
+  document.getElementById('levelup-title').textContent='✨ LEVEL UP! ✨';
+  document.getElementById('levelup-text').textContent='You have reached Level '+state.level+'!';
+  document.getElementById('levelup-gear').textContent=gearName?'🎁 New Equipment: '+gearName:'';
+  var rankEl = document.getElementById('levelup-rank');
+  if (state.classId && oldLevel !== undefined && newLevel !== undefined && didRankChange(state.classId, oldLevel, newLevel)) {
+    var newTitle = getHeroTitle(state.classId, newLevel);
+    rankEl.textContent = '🏅 NEW RANK UNLOCKED: ' + newTitle + '!';
+    rankEl.style.display = 'block';
+  } else {
+    rankEl.style.display = 'none';
+  }
+  showPage('page-levelup');
+  setTimeout(function(){showPage('page-quests');renderQuests();},3000);
+}
+
+// ═══ GEAR ═══
+function getGear(id){for(var i=0;i<GEAR.length;i++)if(GEAR[i].id===id)return GEAR[i];return null;}
+function addGear(id){
+  if(!id||state.inventory.indexOf(id)!==-1)return null;
+  var g=getGear(id);
+  if(!g)return null;
+  state.inventory.push(id);
+  if(g.bonus){for(var s in g.bonus)if(state.stats[s]!==undefined)state.stats[s]+=g.bonus[s];}
+  saveState();
+  return g;
+}
+
+// ═══ QUEST STATE HELPERS ═══
+function getQuestState(key) {
+  return state.questStates[key] || 'available';
+}
+function setQuestState(key, newState) {
+  state.questStates[key] = newState;
+  if (newState === 'complete') {
+    state.questsDone[key] = true;
+  }
+  saveState();
+}
+
+function getQuestLessonUrl(quest) {
+  if (quest.lessonUrl) return quest.lessonUrl;
+  return CAT_URL;
+}
+
+// ═══ BEGIN JOURNEY ═══
+function beginJourney(){
+  var nameEl=document.getElementById('hero-name');
+  var name=nameEl?nameEl.value.trim():'';
+  if(!name){nameEl.style.borderColor='#8b0000';return;}
+  state.heroName=name;
+  saveState();
+  renderExamGrid();
+  showPage('page-exam');
+}
+window.beginJourney=beginJourney;
+
+// ═══ RENDER EXAM GRID ═══
+function renderExamGrid(){
+  var g=document.getElementById('exam-grid');
+  document.getElementById('exam-hero-name').textContent='⚔️ '+state.heroName;
+  g.innerHTML='';
+  EXAM_LIST.forEach(function(ex){
+    var tierClass='tier-'+ex.tier.toLowerCase();
+    var diffIcons=ex.tier==='ARCANE'?'🔥'.repeat(ex.diff):'⚔️'.repeat(ex.diff);
+    var card=document.createElement('div');
+    card.className='exam-card';
+    card.setAttribute('data-exam',ex.id);
+    card.innerHTML='<div class="text-center text-4xl mb-3">'+ex.emoji+'</div>'+
+      '<p class="font-display text-sm text-center mb-1" style="color:var(--gold);">'+ex.code+'</p>'+
+      '<p class="font-body text-base text-center mb-2" style="color:var(--parchment);">'+ex.name+'</p>'+
+      '<p class="text-center text-sm mb-2">'+diffIcons+'</p>'+
+      '<div class="text-center mb-2"><span class="tier-badge '+tierClass+'">'+ex.tier+'</span></div>'+
+      '<p class="font-body text-xs italic text-center" style="color:var(--parchment-dark);">'+ex.flavor+'</p>';
+    g.appendChild(card);
+  });
+  g.querySelectorAll('.exam-card').forEach(function(c){
+    c.addEventListener('click',function(){
+      state.examId=this.getAttribute('data-exam');
+      saveState();
+      renderClassGrid();
+      showPage('page-class');
+    });
+  });
+}
+
+// ═══ RENDER CLASS GRID ═══
+function renderClassGrid(){
+  var exam=EXAMS[state.examId];
+  document.getElementById('class-exam-banner').innerHTML='📜 Path Chosen: <span style="color:var(--fire);">'+exam.code+' — '+exam.name+'</span>';
+  var g=document.getElementById('class-grid');
+  g.innerHTML='';
+  var keys=Object.keys(CLASSES);
+  keys.forEach(function(k){
+    var cl=CLASSES[k];
+    var card=document.createElement('div');
+    card.className='class-card';
+    card.setAttribute('data-class',k);
+    card.innerHTML='<div class="text-center text-5xl mb-3">'+cl.emoji+'</div>'+
+      '<p class="font-display text-lg text-center mb-1" style="color:var(--gold);">'+cl.name+'</p>'+
+      '<p class="font-body text-sm text-center mb-2 italic" style="color:var(--fire);">'+cl.desc+'</p>'+
+      '<div class="stat-grid mb-3 text-xs" style="color:var(--parchment-dark);">'+
+        Object.keys(cl.stats).map(function(s){return '<span>'+s+' +'+cl.stats[s]+'</span>';}).join('')+
+      '</div>'+
+      '<p class="text-xs mb-2" style="color:var(--gold-bright);">⚡ '+cl.special+'</p>'+
+      '<p class="text-xs italic mb-2" style="color:var(--parchment-dark);">'+cl.lore+'</p>'+
+      '<p class="text-xs" style="color:var(--fire);">🗡️ '+cl.weapon+'</p>';
+    g.appendChild(card);
+  });
+  g.querySelectorAll('.class-card').forEach(function(c){
+    c.addEventListener('click',function(){
+      state.classId=this.getAttribute('data-class');
+      var cl=CLASSES[state.classId];
+      state.stats={INT:10,WIS:10,DEX:10,CON:10,STR:10,CHA:10};
+      for(var s in cl.stats)state.stats[s]+=cl.stats[s];
+      saveState();
+      renderMap();
+      showPage('page-map');
+    });
+  });
+}
+
+// ═══ RENDER MAP ═══
+function renderMap(){
+  var exam=EXAMS[state.examId];
+  var cl=CLASSES[state.classId];
+  if(!exam||!cl)return;
+  var heroTitle = getHeroTitle(state.classId, state.level);
+  var tb=document.getElementById('map-topbar');
+  var pct=Math.min(100,Math.round(state.xp/xpToNext(state.level)*100));
+  tb.innerHTML=
+    '<span class="font-display text-xs md:text-sm" style="color:var(--gold);white-space:nowrap;flex-shrink:0;">⚔️ '+state.heroName+' <span style="color:var(--parchment-dark);">the</span> '+heroTitle+'</span>'+
+    '<div class="flex items-center gap-3" style="flex:1;justify-content:center;min-width:0;padding:0 16px;">'+
+      '<div class="xp-bar-outer" style="width:140px;flex-shrink:0;"><div class="xp-bar-inner" style="width:'+pct+'%;"></div></div>'+
+      '<span class="font-display text-xs" style="color:var(--parchment);white-space:nowrap;">🗡️ Lv.'+state.level+' · 💎 '+state.xp+'/'+xpToNext(state.level)+' XP</span>'+
+    '</div>'+
+    '<button id="settings-btn" onclick="openSettings()" title="Open Settings" style="flex-shrink:0;">⚙️</button>';
+
+  var nextRank = getNextRankInfo(state.classId, state.level);
+  var nextRankHtml = nextRank ? '<p class="text-xs text-center mt-1" style="color:var(--parchment-dark);">Next rank: <span style="color:var(--gold-bright);">' + nextRank.nextTitle + '</span> at Lv.' + nextRank.levelNeeded + '</p>' : '<p class="text-xs text-center mt-1" style="color:var(--gold-bright);">🏆 Maximum Rank Achieved!</p>';
+
+  var cs=document.getElementById('char-sheet');
+  // ── Pixel avatar: generate a deterministic 16×16 sprite from heroName + classId ──
+  var _avatarCanvasId = 'pixel-avatar-canvas';
+  cs.innerHTML='<div class="panel p-4">'+
+    '<div class="text-center mb-1" id="avatar-wrap" style="position:relative;display:inline-block;width:100%;"></div>'+
+    '<p class="font-display text-lg text-center" style="color:var(--gold);">'+state.heroName+'</p>'+
+    '<p class="font-display text-sm text-center mb-1" style="color:var(--gold-bright);">'+heroTitle+'</p>'+
+    '<p class="font-body text-xs text-center mb-1 italic" style="color:var(--fire);">'+cl.name+' · Level '+state.level+'</p>'+
+    nextRankHtml+
+    '<p class="text-center mb-3 mt-2"><span class="tier-badge tier-'+exam.tier.toLowerCase()+'" style="font-size:0.65rem;">'+exam.code+'</span></p>'+
+    '<div class="stat-grid mb-3">'+
+      ['INT','WIS','DEX','CON','STR','CHA'].map(function(s){return '<div class="text-xs text-center panel" style="padding:4px;"><span style="color:var(--gold-bright);">'+s+'</span><br><span style="color:var(--parchment);">'+state.stats[s]+'</span></div>';}).join('')+
+    '</div>'+
+    '<div class="xp-bar-outer mb-2"><div class="xp-bar-inner" style="width:'+pct+'%;"></div></div>'+
+    '<p class="text-xs text-center mb-3" style="color:var(--parchment-dark);">'+state.xp+' / '+xpToNext(state.level)+' XP</p>'+
+    '<p class="text-xs text-center mb-3" style="color:var(--gold);cursor:pointer;" onclick="openShop()">💰 Gold: '+((state.gold)||0)+' <span style="font-size:0.65rem;color:var(--fire);">(shop →)</span></p>'+
+    '<button class="btn-secondary w-full" id="btn-satchel">🎒 Open Satchel</button>'+
+    '<button class="btn-secondary w-full mt-2" onclick="openShop()">🏪 Scroll Shop</button>'+
+  '</div>';
+  // Append spell panel to char sheet safely (not inside innerHTML string)
+  var _csZones=getDungeonsConquered();
+  var _csSp=activeSpell(state.classId,_csZones);
+  var _csDiv=document.getElementById('char-sheet').querySelector('.panel');
+  if(_csDiv&&_csSp){
+    var _csC=spCharges(_csSp.id);
+    var _csEl=document.createElement('div');
+    _csEl.style.cssText='margin-top:10px;padding:10px 12px;background:rgba(200,80,10,0.08);border:1px solid rgba(200,80,10,0.4);border-radius:8px;';
+    _csEl.innerHTML='<p style="font-family:\'Cinzel\',serif;font-size:0.65rem;color:var(--fire);letter-spacing:1px;margin-bottom:4px;">⚗️ ACTIVE SPELL</p>'+
+      '<p style="font-size:0.9rem;font-weight:600;color:var(--parchment);">'+_csSp.emoji+' '+_csSp.name+'</p>'+
+      '<p style="font-size:0.78rem;color:var(--parchment-dark);">'+_csSp.desc+'</p>'+
+      '<p style="font-family:\'Cinzel\',serif;font-size:0.65rem;color:var(--gold);margin-top:4px;">'+_csC+'✦ charges</p>';
+    _csDiv.appendChild(_csEl);
+  } else if(_csDiv&&!_csSp){
+    var _noEl=document.createElement('p');
+    _noEl.style.cssText='font-size:0.72rem;color:var(--parchment-dark);text-align:center;margin-top:8px;font-style:italic;';
+    _noEl.textContent='Clear a dungeon to unlock your first spell.';
+    _csDiv.appendChild(_noEl);
+  }
+  document.getElementById('btn-satchel').addEventListener('click',openInventory);
+
+  // ══════════════════════════════════════════════════════
+  // ── EVOLVING HERO PORTRAIT — SVG artwork per tier ──
+  // ══════════════════════════════════════════════════════
+  (function renderHeroPortrait(){
+    var lv   = state.level || 1;
+    var tier = lv>=20?'legend':lv>=15?'expert':lv>=10?'journeyman':lv>=5?'apprentice':'novice';
+    var cls  = state.classId || 'archmage';
+
+    // Tier meta
+    var TIER_META = {
+      novice:     { label:'Novice',      labelColor:'#9ca3af', glow:'none',                          stars:1 },
+      apprentice: { label:'Apprentice',  labelColor:'#4ade80', glow:'0 0 12px #4ade8066',            stars:2 },
+      journeyman: { label:'Journeyman',  labelColor:'#60a5fa', glow:'0 0 16px #60a5fa88',            stars:3 },
+      expert:     { label:'Expert',      labelColor:'#c084fc', glow:'0 0 22px #c084fcaa',            stars:4 },
+      legend:     { label:'⚡ Legend',   labelColor:'#fcd34d', glow:'0 0 32px #fcd34dcc, 0 0 64px #fcd34d44', stars:5 },
+    };
+    var tm = TIER_META[tier];
+
+    // Class palettes: [primary, dark, accent, skin, hair, weapon, glow]
+    var CP = {
+      archmage: { p:'#7c3aed', d:'#3b0764', a:'#e879f9', s:'#fde4be', h:'#1e1b4b', w:'#a78bfa', g:'#f0abfc', name:'Archmage'  },
+      paladin:  { p:'#b45309', d:'#78350f', a:'#fef08a', s:'#fde4be', h:'#92400e', w:'#93c5fd', g:'#fef9c3', name:'Paladin'   },
+      ranger:   { p:'#15803d', d:'#14532d', a:'#86efac', s:'#d97706', h:'#1c1917', w:'#854d0e', g:'#bbf7d0', name:'Ranger'    },
+      diviner:  { p:'#0369a1', d:'#1e3a5f', a:'#38bdf8', s:'#fde4be', h:'#0c1a2e', w:'#7dd3fc', g:'#e0f2fe', name:'Diviner'  },
+      rogue:    { p:'#1f2937', d:'#111827', a:'#ef4444', s:'#c68642', h:'#030712', w:'#6b7280', g:'#fca5a5', name:'Rogue'     },
+    };
+    var c = CP[cls] || CP.archmage;
+
+    // ── SVG PORTRAIT BUILDER ──
+    // Returns a full SVG string for this class × tier combo
+    function buildSVG(cls, tier, c){
+      var W=120, H=140;
+      var s = W/120; // scale factor (1)
+
+      // shared helpers
+      function rect(x,y,w,h,fill,rx){ return '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" fill="'+fill+'"'+(rx?' rx="'+rx+'"':'')+'/>';}
+      function circle(cx,cy,r,fill){ return '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="'+fill+'"/>';}
+      function poly(pts,fill){ return '<polygon points="'+pts+'" fill="'+fill+'"/>';}
+      function line(x1,y1,x2,y2,stroke,sw){ return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+stroke+'" stroke-width="'+(sw||2)+'"/>';}
+      function text(x,y,txt,fill,fs,anchor){return '<text x="'+x+'" y="'+y+'" fill="'+fill+'" font-size="'+(fs||10)+'" text-anchor="'+(anchor||'middle')+'">'+txt+'</text>';}
+
+      var bg='', aura='', body='', head='', weapon='', extras='', shadow='';
+
+      // ── BACKGROUND scene per tier ──
+      var bgScenes = {
+        novice:     rect(0,0,W,H,'#1a1209')+rect(0,H-18,W,18,'#2a1a0a')+rect(0,H-4,W,4,'#0d0a06'), // dirt floor
+        apprentice: rect(0,0,W,H,'#1a120e')+rect(0,H-22,W,22,'#2a1a0a')+rect(2,H-20,6,14,'#5a3a1a')+rect(W-8,H-20,6,14,'#5a3a1a'), // torches
+        journeyman: rect(0,0,W,H,'#100e1a')+rect(0,H-20,W,20,'#1e1430')+circle(W/2,H-10,40,'#1a1030')+rect(10,H-22,8,16,'#2a1060',2)+rect(W-18,H-22,8,16,'#2a1060',2),
+        expert:     rect(0,0,W,H,'#080614')+rect(0,H-22,W,22,'#12082a')+'<radialGradient id="bg_eg" cx="50%" cy="80%" r="60%"><stop offset="0%" stop-color="#3b1a6b" stop-opacity=".5"/><stop offset="100%" stop-color="#080614" stop-opacity="0"/></radialGradient>'+rect(0,0,W,H,'url(#bg_eg)'),
+        legend:     rect(0,0,W,H,'#04020a')+'<radialGradient id="bg_lg" cx="50%" cy="60%" r="70%"><stop offset="0%" stop-color="#fcd34d" stop-opacity=".18"/><stop offset="100%" stop-color="#04020a" stop-opacity="0"/></radialGradient>'+rect(0,0,W,H,'url(#bg_lg)')+rect(0,H-18,W,18,'#0a0808'),
+      };
+      bg = bgScenes[tier] || bgScenes.novice;
+
+      // ground shadow under feet
+      shadow = '<ellipse cx="60" cy="'+(H-6)+'" rx="22" ry="4" fill="rgba(0,0,0,0.5)"/>';
+
+      // ── BODY per tier ──
+      // All tiers share: legs, torso, arms, head region — detail increases
+
+      // feet/boots
+      var bootColor = tier==='novice'?'#4a3728':c.d;
+      body += rect(38,H-26,14,12,bootColor,2); // left boot
+      body += rect(68,H-26,14,12,bootColor,2); // right boot
+      if(tier!=='novice'){ body+=rect(38,H-20,14,4,c.p); body+=rect(68,H-20,14,4,c.p); } // boot trim
+
+      // legs
+      var legColor = tier==='novice'?'#5a3a1a':c.d;
+      body += rect(40,H-48,12,24,legColor);
+      body += rect(68,H-48,12,24,legColor);
+      if(tier==='journeyman'||tier==='expert'||tier==='legend'){
+        body+=rect(40,H-48,12,4,c.a,1); body+=rect(68,H-48,12,4,c.a,1); // knee guards
+      }
+
+      // torso
+      var chestH = tier==='novice'?26:tier==='apprentice'?28:30;
+      var chestW = tier==='novice'?26:tier==='apprentice'?28:32;
+      var chestX = 60-chestW/2;
+      var chestY = H-48-chestH;
+      body += rect(chestX, chestY, chestW, chestH, tier==='novice'?'#7a5a3a':c.p, 3);
+      // chest detail
+      if(tier==='apprentice'){ body+=rect(chestX+4,chestY+4,chestW-8,chestH-10,c.d,2); body+=circle(60,chestY+8,4,c.a); }
+      if(tier==='journeyman'){ body+=rect(chestX+3,chestY+3,chestW-6,chestH-8,c.d,2); body+=circle(60,chestY+7,5,c.a)+circle(60,chestY+7,3,c.g); body+=rect(chestX,chestY,chestW,5,c.a,2); }
+      if(tier==='expert'){     body+=rect(chestX+2,chestY+2,chestW-4,chestH-6,c.d,3); body+=circle(60,chestY+8,6,c.a)+circle(60,chestY+8,4,c.g)+circle(60,chestY+8,2,'#fff'); body+=rect(chestX,chestY,chestW,6,c.a,2); body+=rect(chestX+2,chestY+chestH-8,chestW-4,6,c.a,1); }
+      if(tier==='legend'){     body+=rect(chestX+2,chestY+2,chestW-4,chestH-5,c.d,3); body+=circle(60,chestY+9,7,c.a)+circle(60,chestY+9,5,c.g)+circle(60,chestY+9,3,'#fff9c4')+circle(60,chestY+9,1.5,c.a); body+=rect(chestX,chestY,chestW,7,c.a,2); body+=rect(chestX+2,chestY+chestH-9,chestW-4,7,c.a,1); }
+
+      // arms
+      var armW=9, armH=tier==='novice'?18:20;
+      var armColor=tier==='novice'?'#7a5a3a':c.p;
+      body+=rect(chestX-armW+1,chestY+4,armW,armH,armColor,3); // left arm
+      body+=rect(chestX+chestW-1,chestY+4,armW,armH,armColor,3); // right arm
+      if(tier!=='novice'){
+        body+=rect(chestX-armW+1,chestY+4,armW,5,c.a,2); // shoulder L
+        body+=rect(chestX+chestW-1,chestY+4,armW,5,c.a,2); // shoulder R
+      }
+
+      // ── HEAD per tier ──
+      var headY=chestY-34, headW=30, headH=28;
+      var headX=60-headW/2;
+      // neck
+      head+=rect(55,chestY-6,10,8,c.s);
+      // base head
+      head+=rect(headX,headY,headW,headH,c.s,4);
+      // eyes
+      var eyeY=headY+11;
+      head+=rect(headX+6,eyeY,5,4,'#1a1209',2)+rect(headX+19,eyeY,5,4,'#1a1209',2); // eye whites/sockets
+      var eyeColor=tier==='legend'?c.g:tier==='expert'?c.a:'#1a6b3f';
+      head+=rect(headX+7,eyeY+1,3,3,eyeColor,1)+rect(headX+20,eyeY+1,3,3,eyeColor,1); // pupils
+      if(tier==='expert'||tier==='legend'){ head+=rect(headX+8,eyeY+1,1,2,c.g)+rect(headX+21,eyeY+1,1,2,c.g); } // eye glow
+      // nose
+      head+=rect(58,headY+17,4,3,c.s==='#d97706'?'#c05e00':'#e8c08a',1);
+      // mouth
+      if(tier==='novice')   { head+=rect(56,headY+22,8,2,'#7a4030',1); }
+      else if(tier==='legend'){ head+=rect(55,headY+21,10,2,c.a,1); head+=circle(60,headY+22,1,c.g); }
+      else                  { head+=rect(56,headY+22,8,2,'#7a4030',1); }
+
+      // ── HEADWEAR per class × tier ──
+      // novice: messy hair for all
+      if(tier==='novice'){
+        var hairColor=c.h||'#3a2a1a';
+        head+=rect(headX-1,headY-3,headW+2,8,hairColor,3);
+        head+=rect(headX-1,headY-3,5,6,hairColor,2)+rect(headX+headW-4,headY-3,5,6,hairColor,2);
+      } else {
+        // class-specific headwear by tier
+        if(cls==='archmage'){
+          if(tier==='apprentice'){ // small hood/hat brim
+            head+=rect(headX-2,headY-2,headW+4,8,c.p,2);
+            head+=rect(headX+6,headY-16,18,16,c.d,3);
+            head+=rect(headX+9,headY-28,12,14,c.d,2);
+          }
+          if(tier==='journeyman'||tier==='expert'){
+            head+=rect(headX-4,headY-2,headW+8,7,c.p,2); // wide brim
+            head+=rect(headX+5,headY-18,20,18,c.d,3);    // hat body
+            head+=rect(headX+8,headY-32,14,16,c.d,2);    // hat tip
+            head+=rect(headX+5,headY-4,20,4,c.a,1);      // brim accent
+          }
+          if(tier==='expert'||tier==='legend'){
+            head+=circle(60,headY-34,5,c.a)+circle(60,headY-34,3,c.g)+circle(60,headY-34,1.5,'#fff'); // star tip
+          }
+          if(tier==='legend'){
+            head+=rect(headX-5,headY-3,headW+10,8,c.p,2);
+            head+=rect(headX+4,headY-20,22,20,c.d,3);
+            head+=rect(headX+7,headY-36,16,18,c.d,2);
+            head+=circle(60,headY-37,6,c.a)+circle(60,headY-37,4,c.g)+circle(60,headY-37,2,'#fffde7');
+            // crown stars
+            head+=circle(headX+4,headY-4,3,c.a)+circle(headX+headW-4,headY-4,3,c.a);
+          }
+        }
+        if(cls==='paladin'){
+          if(tier==='apprentice'){
+            head+=rect(headX-2,headY-2,headW+4,headH+2,c.p,4); // simple helm
+            head+=rect(headX+2,headY+2,headW-4,8,c.d,2); // visor
+          }
+          if(tier==='journeyman'){ head+=rect(headX-3,headY-4,headW+6,headH+4,c.p,4); head+=rect(55,headY+10,10,4,c.a,1); head+=rect(headX-3,headY-4,headW+6,8,c.a,2); }
+          if(tier==='expert'){     head+=rect(headX-4,headY-6,headW+8,headH+6,c.p,4); head+=rect(54,headY+11,12,3,c.a,1); head+=rect(headX-4,headY-6,headW+8,10,c.a,2); head+=circle(60,headY-8,5,c.a)+circle(60,headY-8,3,c.g); }
+          if(tier==='legend'){     head+=rect(headX-5,headY-8,headW+10,headH+8,c.p,5); head+=rect(53,headY+12,14,3,c.a,1); head+=rect(headX-5,headY-8,headW+10,12,c.a,2); head+=circle(60,headY-10,7,c.a)+circle(60,headY-10,5,c.g)+circle(60,headY-10,3,'#fff9c4'); [52,60,68].forEach(function(x){head+=circle(x,headY-12,2,c.g);}); }
+        }
+        if(cls==='ranger'){
+          var hoodColor=c.p;
+          if(tier==='apprentice'){ head+=rect(headX-2,headY-2,headW+4,headH+10,hoodColor,4); head+=rect(headX+2,headY+2,headW-4,headH-4,c.s,2); } // hood over face
+          if(tier==='journeyman'){ head+=rect(headX-4,headY-4,headW+8,headH+12,hoodColor,5); head+=rect(headX+2,headY+2,headW-4,headH-4,c.s,2); head+=rect(headX-4,headY+headH,headW+8,8,c.d,3); }
+          if(tier==='expert'){     head+=rect(headX-5,headY-6,headW+10,headH+14,hoodColor,5); head+=rect(headX+3,headY+2,headW-6,headH-4,c.s,3); head+=rect(headX-5,headY+headH,headW+10,10,c.d,3); head+=circle(60,headY-7,4,c.a); }
+          if(tier==='legend'){     head+=rect(headX-6,headY-8,headW+12,headH+16,hoodColor,6); head+=rect(headX+4,headY+2,headW-8,headH-4,c.s,3); head+=rect(headX-6,headY+headH,headW+12,12,c.d,4); head+=circle(60,headY-10,6,c.a)+circle(60,headY-10,4,c.g); }
+        }
+        if(cls==='diviner'){
+          var circletY=headY-3;
+          if(tier==='apprentice'){ head+=rect(headX-1,circletY,headW+2,5,c.a,2); head+=circle(60,circletY+2,4,c.p)+circle(60,circletY+2,2.5,c.a)+circle(60,circletY+2,1,c.g); }
+          if(tier==='journeyman'){ head+=rect(headX-2,circletY-2,headW+4,6,c.a,3); [50,60,70].forEach(function(x){head+=circle(x,circletY-1,3,c.p)+circle(x,circletY-1,2,c.a);}); }
+          if(tier==='expert'){     head+=rect(headX-3,circletY-3,headW+6,7,c.a,3); [48,56,64,72].forEach(function(x){head+=circle(x,circletY-2,3,c.p)+circle(x,circletY-2,2,c.g);}); head+=rect(headX-3,circletY-3,headW+6,3,c.g,2); }
+          if(tier==='legend'){     head+=rect(headX-4,circletY-5,headW+8,8,c.a,4); [46,54,60,66,74].forEach(function(x){head+=circle(x,circletY-4,4,c.p)+circle(x,circletY-4,2.5,c.g)+circle(x,circletY-4,1,'#fff');}); head+=rect(headX-4,circletY-5,headW+8,4,c.g,3); }
+        }
+        if(cls==='rogue'){
+          var maskColor=c.d;
+          if(tier==='apprentice'){ head+=rect(headX-1,headY-3,headW+2,8,maskColor,3); head+=rect(headX+4,eyeY,headW-8,6,c.p,1); head+=rect(headX+6,eyeY+1,4,4,c.a,1)+rect(headX+20,eyeY+1,4,4,c.a,1); } // replace eyes
+          if(tier==='journeyman'){ head+=rect(headX-2,headY-4,headW+4,10,maskColor,3); head+=rect(headX+3,eyeY-1,headW-6,8,c.d,2); head+=rect(headX+6,eyeY+1,4,4,c.a,1)+rect(headX+20,eyeY+1,4,4,c.a,1); }
+          if(tier==='expert'){     head+=rect(headX-3,headY-5,headW+6,12,maskColor,4); head+=rect(headX+3,eyeY-2,headW-6,8,c.d,2); head+=rect(headX+6,eyeY,4,5,c.a,1)+rect(headX+20,eyeY,4,5,c.a,1); }
+          if(tier==='legend'){     head+=rect(headX-4,headY-6,headW+8,14,maskColor,5); head+=rect(headX+2,eyeY-3,headW-4,9,c.d,3); head+=rect(headX+5,eyeY-1,5,6,c.a,1)+rect(headX+20,eyeY-1,5,6,c.a,1); head+=circle(headX+7,eyeY+2,2,c.g)+circle(headX+22,eyeY+2,2,c.g); }
+        }
+      }
+
+      // ── WEAPON per class × tier ──
+      if(cls==='archmage'){
+        if(tier==='novice'){   weapon+=rect(22,chestY-10,4,50,'#6b4226',1)+circle(24,chestY-12,5,'#7a6050'); } // plain staff
+        if(tier==='apprentice'){weapon+=rect(22,chestY-14,4,54,'#4c1d95',1)+circle(24,chestY-16,6,c.a)+circle(24,chestY-16,4,c.g); }
+        if(tier==='journeyman'){weapon+=rect(21,chestY-18,5,58,'#3b0764',1)+circle(24,chestY-20,7,c.a)+circle(24,chestY-20,5,c.g)+circle(24,chestY-20,2,'#fff'); }
+        if(tier==='expert'){   weapon+=rect(20,chestY-22,5,62,'#3b0764',1)+rect(18,chestY-24,9,5,c.p,2)+circle(24,chestY-26,8,c.a)+circle(24,chestY-26,6,c.g)+circle(24,chestY-26,3,'#fff'); }
+        if(tier==='legend'){   weapon+=rect(20,chestY-26,5,68,'#1e0a3c',1)+rect(17,chestY-28,11,6,c.p,2)+circle(24,chestY-32,10,c.a)+circle(24,chestY-32,7,c.g)+circle(24,chestY-32,4,'#fffde7')+circle(24,chestY-32,2,c.a); }
+      }
+      if(cls==='paladin'){
+        // sword right side
+        var swX=chestX+chestW+armW+2;
+        if(tier==='novice'){   weapon+=rect(swX,chestY-4,4,36,'#aaa',1)+rect(swX-3,chestY-6,10,5,'#888',1)+circle(swX+2,chestY-8,4,'#c8a000'); }
+        if(tier==='apprentice'){weapon+=rect(swX,chestY-8,5,40,c.w,1)+rect(swX-4,chestY-10,13,6,c.p,2)+circle(swX+2,chestY-13,5,c.a); }
+        if(tier==='journeyman'){weapon+=rect(swX,chestY-12,5,44,c.w,1)+rect(swX-5,chestY-14,15,7,c.p,2)+circle(swX+2,chestY-18,6,c.a)+circle(swX+2,chestY-18,4,c.g); }
+        if(tier==='expert'){   weapon+=rect(swX,chestY-16,6,48,c.w,1)+rect(swX-6,chestY-18,17,8,c.p,2)+circle(swX+3,chestY-23,8,c.a)+circle(swX+3,chestY-23,5,c.g)+circle(swX+3,chestY-23,2,'#fff'); }
+        if(tier==='legend'){   weapon+=rect(swX,chestY-20,6,52,c.w,1)+rect(swX+1,chestY-22,4,54,c.g,1); weapon+=rect(swX-7,chestY-22,19,9,c.p,3)+circle(swX+3,chestY-28,10,c.a)+circle(swX+3,chestY-28,7,c.g)+circle(swX+3,chestY-28,4,'#fff9c4'); }
+        // shield left
+        var shX=chestX-armW-14;
+        if(tier==='journeyman'||tier==='expert'||tier==='legend'){
+          weapon+=rect(shX,chestY,14,18,c.p,3)+rect(shX+2,chestY+2,10,14,c.d,2)+circle(shX+7,chestY+9,4,c.a)+(tier==='legend'?circle(shX+7,chestY+9,2,c.g):'');
+        }
+      }
+      if(cls==='ranger'){
+        // bow on right
+        var bX=chestX+chestW+armW+3, bY=chestY-20;
+        if(tier==='novice'){   weapon+=rect(bX,bY+10,3,28,'#854d0e',1); }
+        if(tier==='apprentice'){weapon+='<path d="M'+bX+' '+(bY+4)+' Q'+(bX+14)+' '+(bY+20)+' '+bX+' '+(bY+38)+'" stroke="'+c.w+'" stroke-width="3" fill="none"/>'+line(bX,bY+4,bX,bY+38,'#6b3a0a',1); }
+        if(tier==='journeyman'){weapon+='<path d="M'+bX+' '+bY+' Q'+(bX+18)+' '+(bY+22)+' '+bX+' '+(bY+44)+'" stroke="'+c.w+'" stroke-width="4" fill="none"/>'+line(bX,bY,bX,bY+44,c.d,1); weapon+=circle(bX,bY,3,c.a)+circle(bX,bY+44,3,c.a); }
+        if(tier==='expert'){   weapon+='<path d="M'+bX+' '+(bY-4)+' Q'+(bX+22)+' '+(bY+24)+' '+bX+' '+(bY+50)+'" stroke="'+c.w+'" stroke-width="4" fill="none"/>'+line(bX,bY-4,bX,bY+50,c.d,1); weapon+=circle(bX,bY-4,4,c.a)+circle(bX,bY+50,4,c.a)+circle(bX,bY+23,3,c.g); }
+        if(tier==='legend'){   weapon+='<path d="M'+bX+' '+(bY-6)+' Q'+(bX+26)+' '+(bY+26)+' '+bX+' '+(bY+56)+'" stroke="'+c.g+'" stroke-width="5" fill="none" filter="url(#glow)"/>'+line(bX,bY-6,bX,bY+56,c.w,2); weapon+=circle(bX,bY-6,5,c.a)+circle(bX,bY+56,5,c.a)+circle(bX,bY+26,4,c.g)+circle(bX,bY+26,2,'#fff'); }
+      }
+      if(cls==='diviner'){
+        // orb on left hand
+        var oX=chestX-armW-4, oY=chestY+armH-4;
+        if(tier==='novice'){   weapon+=circle(oX,oY,6,'#1e3a5f'); }
+        if(tier==='apprentice'){weapon+=circle(oX,oY,7,c.p)+circle(oX,oY,5,c.a)+circle(oX,oY,2,c.g); }
+        if(tier==='journeyman'){weapon+=circle(oX,oY,9,c.p)+circle(oX,oY,7,c.a)+circle(oX,oY,4,c.g)+circle(oX,oY,2,'#fff'); }
+        if(tier==='expert'){   weapon+=circle(oX,oY,11,c.p)+circle(oX,oY,8,c.a)+circle(oX,oY,5,c.g)+circle(oX,oY,2.5,'#fff'); weapon+=circle(oX-6,oY-6,4,c.a)+circle(oX+6,oY-6,4,c.a); }
+        if(tier==='legend'){   weapon+=circle(oX,oY,13,c.p)+circle(oX,oY,10,c.a)+circle(oX,oY,7,c.g)+circle(oX,oY,4,'#fffde7')+circle(oX,oY,1.5,c.a); [0,60,120,180,240,300].forEach(function(deg){var r=deg*Math.PI/180;weapon+=circle(oX+Math.cos(r)*12,oY+Math.sin(r)*12,2.5,c.g);}); }
+        // tome right hand
+        var tX=chestX+chestW+armW, tY=chestY+4;
+        if(tier!=='novice'){ weapon+=rect(tX,tY,10,14,c.p,1)+rect(tX+1,tY+1,8,12,c.d,1)+rect(tX+3,tY+3,4,2,c.a,1)+rect(tX+3,tY+7,4,2,c.a,1); }
+      }
+      if(cls==='rogue'){
+        // daggers
+        var d1X=chestX-armW-2, d1Y=chestY+6;
+        var d2X=chestX+chestW+armW-2, d2Y=chestY+10;
+        if(tier==='novice'){   weapon+=rect(d1X,d1Y,3,22,'#6b7280',1); }
+        if(tier==='apprentice'){weapon+=rect(d1X,d1Y-4,3,26,c.w,1)+rect(d1X-2,d1Y-6,7,5,c.p,1)+circle(d1X+1,d1Y-8,3,c.a); }
+        if(tier==='journeyman'){weapon+=rect(d1X,d1Y-6,3,28,c.w,1)+rect(d1X-3,d1Y-8,9,6,c.p,1)+circle(d1X+1,d1Y-10,4,c.a); weapon+=rect(d2X,d2Y-4,3,26,c.w,1)+rect(d2X-3,d2Y-6,9,5,c.p,1); }
+        if(tier==='expert'){   weapon+=rect(d1X,d1Y-8,4,30,c.w,1)+rect(d1X-1,d1Y-10,6,30,c.a,1); weapon+=rect(d1X-3,d1Y-10,10,7,c.p,2)+circle(d1X+2,d1Y-13,5,c.a); weapon+=rect(d2X,d2Y-6,4,28,c.w,1)+rect(d2X-3,d2Y-8,10,6,c.p,2); }
+        if(tier==='legend'){   weapon+=rect(d1X,d1Y-10,4,32,c.w,1)+rect(d1X-1,d1Y-12,6,34,c.a,1)+rect(d1X,d1Y-10,4,34,c.g,1); weapon+=rect(d1X-4,d1Y-12,12,8,c.p,2)+circle(d1X+2,d1Y-15,6,c.a)+circle(d1X+2,d1Y-15,4,c.g)+circle(d1X+2,d1Y-15,2,'#fff'); weapon+=rect(d2X,d2Y-8,4,30,c.w,1)+rect(d2X-1,d2Y-10,6,32,c.a,1)+rect(d2X,d2Y-8,4,32,c.g,1); weapon+=rect(d2X-4,d2Y-10,12,7,c.p,2)+circle(d2X+2,d2Y-13,5,c.a)+circle(d2X+2,d2Y-13,3,c.g); }
+      }
+
+      // ── AURA / GLOW effects for higher tiers ──
+      if(tier==='expert'||tier==='legend'){
+        var glowR=tier==='legend'?48:34;
+        var glowColor=tier==='legend'?c.g:c.a;
+        var glowOp=tier==='legend'?'0.22':'0.13';
+        aura='<radialGradient id="aura_g" cx="50%" cy="45%" r="50%"><stop offset="0%" stop-color="'+glowColor+'" stop-opacity="'+glowOp+'"/><stop offset="100%" stop-color="'+glowColor+'" stop-opacity="0"/></radialGradient>'+rect(0,0,W,H,'url(#aura_g)');
+      }
+      if(tier==='legend'){
+        // particle sparkles
+        extras+='<circle cx="30" cy="25" r="2" fill="'+c.g+'" opacity=".7"/><circle cx="90" cy="35" r="2.5" fill="'+c.a+'" opacity=".8"/><circle cx="20" cy="70" r="1.5" fill="'+c.g+'" opacity=".6"/><circle cx="100" cy="80" r="2" fill="'+c.a+'" opacity=".7"/><circle cx="55" cy="10" r="1.5" fill="'+c.g+'" opacity=".9"/>';
+        // animated glow ring
+        extras+='<circle cx="60" cy="'+( chestY+chestH/2)+'" r="'+( chestW/2+6)+'" fill="none" stroke="'+c.a+'" stroke-width="1.5" opacity=".3"/>';
+      }
+
+      var svgContent = bg + shadow + aura + weapon + body + head + extras;
+
+      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" style="display:block;margin:0 auto;">'+
+        '<defs><filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>'+
+        svgContent+
+      '</svg>';
+    }
+
+    // ── INJECT PORTRAIT ──
+    var wrap = document.getElementById('avatar-wrap');
+    if(!wrap) return;
+    var svgStr = buildSVG(cls, tier, c);
+    var borderColor = tm.labelColor;
+    var wrapDiv = document.createElement('div');
+    wrapDiv.style.cssText='display:inline-block;border:2px solid '+borderColor+';border-radius:12px;box-shadow:'+tm.glow+';overflow:hidden;background:#04020a;';
+    wrapDiv.innerHTML = svgStr;
+    wrap.appendChild(wrapDiv);
+
+    // Stars row
+    var stars='';
+    for(var i=0;i<5;i++) stars+='<span style="color:'+(i<tm.stars?tm.labelColor:'#333')+';">★</span>';
+    var starsEl=document.createElement('p');
+    starsEl.style.cssText='font-size:0.8rem;text-align:center;letter-spacing:2px;margin-top:2px;';
+    starsEl.innerHTML=stars;
+    wrap.appendChild(starsEl);
+
+    // Tier badge
+    var labelEl=document.createElement('p');
+    labelEl.style.cssText='font-family:\'Cinzel\',serif;font-size:0.6rem;text-align:center;letter-spacing:2px;margin-top:1px;font-weight:700;text-shadow:0 0 8px currentColor;';
+    labelEl.style.color=tm.labelColor;
+    labelEl.textContent='— '+tm.label+' —';
+    wrap.appendChild(labelEl);
+  })();
+
+  var dm=document.getElementById('dungeon-map');
+  dm.innerHTML='<h3 class="font-display text-xl mb-3" style="color:var(--gold);">⚔️ The Six Dungeons</h3>';
+  exam.dungeons.forEach(function(d,i){
+    var isOpen=i===0||state.dungeonsDone.indexOf(state.examId+'_'+(i))!==-1;
+    var isConquered=state.dungeonsDone.indexOf(state.examId+'_'+(i+1))!==-1;
+    var status=isConquered?'conquered':(isOpen?'open':'sealed');
+    var badge=isConquered?'<span style="color:#4caf50;">✅ CONQUERED</span>':(isOpen?'<span style="color:var(--gold);">🟢 OPEN</span>':'<span style="color:#888;">🔒 SEALED</span>');
+    var qDoneCount=0;
+    for(var qi=0;qi<3;qi++){
+      var qk=state.examId+'_'+d.id+'_m'+qi;
+      if(state.questStates[qk]==='complete')qDoneCount++;
+    }
+    var card=document.createElement('div');
+    card.className='dungeon-card '+status+' mb-2';
+    card.setAttribute('data-dungeon',i);
+    card.innerHTML='<div class="flex items-center gap-3">'+
+      '<span class="text-2xl">'+d.emoji+'</span>'+
+      '<div class="flex-1">'+
+        '<p class="font-display text-sm" style="color:var(--gold);">'+d.name+'</p>'+
+        '<p class="text-xs" style="color:var(--parchment-dark);">Levels '+d.levelRange+' · '+d.topic+'</p>'+
+        '<p class="text-xs" style="color:var(--parchment-dark);">📜 3 Main + ⚡ 2 Side · Done: '+qDoneCount+'/3</p>'+
+      '</div>'+
+      '<div class="text-right text-xs">'+badge+'</div>'+
+    '</div>';
+    if(isOpen && !isConquered){
+      card.style.cursor='pointer';
+      card.addEventListener('click',function(){
+        state.currentDungeon=parseInt(this.getAttribute('data-dungeon'));
+        saveState();
+        renderQuests();
+        showPage('page-quests');
+      });
+    }
+    dm.appendChild(card);
+  });
+}
+
+// ═══ FREE RESOURCES DATA ═══
+var FREE_RESOURCES = {
+  // Topic-keyed resources
+  compute: [
+    {icon:'📹',title:'AWS EC2 Basics — freeCodeCamp',desc:'Full YouTube tutorial on EC2 fundamentals, instance types, and pricing.',badge:'video',url:'https://www.youtube.com/results?search_query=aws+ec2+tutorial+freeCodeCamp',link:'YouTube (Free)'},
+    {icon:'📖',title:'AWS EC2 User Guide',desc:'Official AWS documentation covering all EC2 concepts tested on the exam.',badge:'official',url:'https://docs.aws.amazon.com/ec2/latest/userguide/',link:'docs.aws.amazon.com'},
+    {icon:'🎓',title:'AWS Skill Builder — Free Tier',desc:'AWS\'s own free digital training platform with EC2 & compute courses.',badge:'free',url:'https://skillbuilder.aws/',link:'skillbuilder.aws'},
+    {icon:'🃏',title:'Anki Flashcard Decks',desc:'Community-made AWS flashcard decks for memorizing EC2 instance types and pricing.',badge:'free',url:'https://ankiweb.net/shared/decks/aws',link:'ankiweb.net'}
+  ],
+  networking: [
+    {icon:'📹',title:'VPC Deep Dive — AWS re:Invent',desc:'Free recorded AWS re:Invent session covering VPC, subnets, routing, and security.',badge:'video',url:'https://www.youtube.com/results?search_query=aws+vpc+deep+dive+reinvent',link:'YouTube (Free)'},
+    {icon:'📖',title:'AWS VPC Documentation',desc:'Official AWS VPC guide — subnets, NACLs, security groups, and peering.',badge:'official',url:'https://docs.aws.amazon.com/vpc/latest/userguide/',link:'docs.aws.amazon.com'},
+    {icon:'🎓',title:'AWS Networking Fundamentals — Skill Builder',desc:'Free course on AWS networking concepts on AWS Skill Builder.',badge:'free',url:'https://skillbuilder.aws/',link:'skillbuilder.aws'}
+  ],
+  storage: [
+    {icon:'📹',title:'S3 Complete Tutorial — freeCodeCamp',desc:'YouTube walkthrough of S3 buckets, storage classes, versioning, and lifecycle.',badge:'video',url:'https://www.youtube.com/results?search_query=aws+s3+tutorial+complete',link:'YouTube (Free)'},
+    {icon:'📖',title:'Amazon S3 User Guide',desc:'Official AWS S3 documentation covering all storage classes and features.',badge:'official',url:'https://docs.aws.amazon.com/s3/latest/userguide/',link:'docs.aws.amazon.com'},
+    {icon:'🎯',title:'AWS Certified Practice — ExamTopics',desc:'Free community-shared practice questions for storage topics.',badge:'free',url:'https://www.examtopics.com/exams/amazon/',link:'examtopics.com'}
+  ],
+  security: [
+    {icon:'📹',title:'AWS IAM Full Course — TechWorld with Nana',desc:'Comprehensive YouTube course on IAM users, roles, policies, and best practices.',badge:'video',url:'https://www.youtube.com/results?search_query=aws+iam+full+course',link:'YouTube (Free)'},
+    {icon:'📖',title:'AWS IAM User Guide',desc:'Official documentation for IAM — policies, roles, MFA, and security best practices.',badge:'official',url:'https://docs.aws.amazon.com/iam/latest/userguide/',link:'docs.aws.amazon.com'},
+    {icon:'🔍',title:'AWS Well-Architected — Security Pillar',desc:'Free whitepaper: the definitive guide to AWS security architecture.',badge:'free',url:'https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/',link:'docs.aws.amazon.com'}
+  ],
+  database: [
+    {icon:'📹',title:'AWS RDS & DynamoDB Tutorial — freeCodeCamp',desc:'Free YouTube course covering RDS, Aurora, DynamoDB, and ElastiCache.',badge:'video',url:'https://www.youtube.com/results?search_query=aws+rds+dynamodb+tutorial+freeCodeCamp',link:'YouTube (Free)'},
+    {icon:'📖',title:'Amazon RDS User Guide',desc:'Official AWS RDS documentation — Multi-AZ, Read Replicas, and backup strategies.',badge:'official',url:'https://docs.aws.amazon.com/rds/latest/userguide/',link:'docs.aws.amazon.com'},
+    {icon:'🎓',title:'Database Learning Plan — AWS Skill Builder',desc:'Free structured learning path for AWS databases on Skill Builder.',badge:'free',url:'https://skillbuilder.aws/',link:'skillbuilder.aws'}
+  ],
+  serverless: [
+    {icon:'📹',title:'AWS Lambda Full Course — Serverless Land',desc:'Free YouTube tutorials on Lambda, API Gateway, and event-driven architecture.',badge:'video',url:'https://www.youtube.com/results?search_query=aws+lambda+full+tutorial',link:'YouTube (Free)'},
+    {icon:'📖',title:'AWS Lambda Developer Guide',desc:'Official Lambda documentation covering triggers, runtimes, and best practices.',badge:'official',url:'https://docs.aws.amazon.com/lambda/latest/dg/',link:'docs.aws.amazon.com'},
+    {icon:'🏗️',title:'Serverless Land — Free Patterns',desc:'AWS\'s free resource library of serverless patterns and real-world examples.',badge:'free',url:'https://serverlessland.com/',link:'serverlessland.com'}
+  ],
+  monitoring: [
+    {icon:'📹',title:'CloudWatch Tutorial — Be A Better Dev',desc:'Free YouTube tutorial on CloudWatch metrics, alarms, dashboards, and logs.',badge:'video',url:'https://www.youtube.com/results?search_query=aws+cloudwatch+tutorial',link:'YouTube (Free)'},
+    {icon:'📖',title:'Amazon CloudWatch User Guide',desc:'Official AWS CloudWatch documentation for metrics, alarms, logs, and dashboards.',badge:'official',url:'https://docs.aws.amazon.com/cloudwatch/',link:'docs.aws.amazon.com'},
+    {icon:'🔍',title:'AWS CloudTrail Documentation',desc:'Official guide to auditing API calls and events across your AWS account.',badge:'official',url:'https://docs.aws.amazon.com/cloudtrail/',link:'docs.aws.amazon.com'}
+  ],
+  devops: [
+    {icon:'📹',title:'AWS CI/CD Pipeline — freeCodeCamp',desc:'Free YouTube course on CodePipeline, CodeBuild, CodeDeploy, and CloudFormation.',badge:'video',url:'https://www.youtube.com/results?search_query=aws+cicd+pipeline+tutorial',link:'YouTube (Free)'},
+    {icon:'📖',title:'AWS DevOps Documentation',desc:'Official AWS documentation for all DevOps services including CDK and CloudFormation.',badge:'official',url:'https://docs.aws.amazon.com/devops/latest/userguide/',link:'docs.aws.amazon.com'},
+    {icon:'🎓',title:'AWS DevOps Learning Plan — Skill Builder',desc:'Free structured learning path for DevOps on AWS Skill Builder.',badge:'free',url:'https://skillbuilder.aws/',link:'skillbuilder.aws'}
+  ],
+  ml: [
+    {icon:'📹',title:'AWS AI/ML Full Course — freeCodeCamp',desc:'Free YouTube course covering SageMaker, Bedrock, Rekognition, and AI services.',badge:'video',url:'https://www.youtube.com/results?search_query=aws+machine+learning+full+course',link:'YouTube (Free)'},
+    {icon:'📖',title:'Amazon SageMaker Developer Guide',desc:'Official SageMaker documentation — build, train, and deploy ML models.',badge:'official',url:'https://docs.aws.amazon.com/sagemaker/',link:'docs.aws.amazon.com'},
+    {icon:'🎓',title:'ML Learning Plan — AWS Skill Builder',desc:'Free ML Foundations and MLOps courses on AWS Skill Builder.',badge:'free',url:'https://skillbuilder.aws/',link:'skillbuilder.aws'}
+  ],
+  cost: [
+    {icon:'📹',title:'AWS Cost Management Tutorial',desc:'Free YouTube walkthrough of Cost Explorer, Budgets, and savings strategies.',badge:'video',url:'https://www.youtube.com/results?search_query=aws+cost+management+tutorial',link:'YouTube (Free)'},
+    {icon:'📖',title:'AWS Cost Management User Guide',desc:'Official guide to Cost Explorer, AWS Budgets, Savings Plans, and billing.',badge:'official',url:'https://docs.aws.amazon.com/cost-management/',link:'docs.aws.amazon.com'},
+    {icon:'🔍',title:'AWS Pricing Calculator',desc:'Free tool to estimate costs for any AWS architecture before you build.',badge:'free',url:'https://calculator.aws/',link:'calculator.aws'}
+  ],
+  general: [
+    {icon:'📹',title:'AWS Full Course — freeCodeCamp',desc:'The most-watched free AWS course on YouTube — covers all major services.',badge:'video',url:'https://www.youtube.com/results?search_query=aws+full+course+freeCodeCamp',link:'YouTube (Free)'},
+    {icon:'📖',title:'AWS Documentation Hub',desc:'The official home of all AWS service documentation — always free.',badge:'official',url:'https://docs.aws.amazon.com/',link:'docs.aws.amazon.com'},
+    {icon:'🎓',title:'AWS Skill Builder (Free Tier)',desc:'Hundreds of free digital courses from AWS covering every certification topic.',badge:'free',url:'https://skillbuilder.aws/',link:'skillbuilder.aws'},
+    {icon:'🃏',title:'AWS Exam Readiness — Free Courses',desc:'Free exam-specific prep courses on AWS Skill Builder for every certification.',badge:'free',url:'https://skillbuilder.aws/',link:'skillbuilder.aws'}
+  ]
+};
+
+function getFreeResources(questLesson) {
+  var t = (questLesson || '').toLowerCase();
+  if (t.match(/compute|ec2|instance|elb|load balanc|auto scal|elastic/)) return FREE_RESOURCES.compute;
+  if (t.match(/network|vpc|subnet|gateway|route|dns|connect|cdn|cloudfront/)) return FREE_RESOURCES.networking;
+  if (t.match(/storage|s3|ebs|efs|glacier|backup|object/)) return FREE_RESOURCES.storage;
+  if (t.match(/security|iam|encrypt|kms|guard|shield|waf|complian|identity|access|permission/)) return FREE_RESOURCES.security;
+  if (t.match(/database|rds|dynamo|aurora|redis|cache|redshift|sql/)) return FREE_RESOURCES.database;
+  if (t.match(/serverless|lambda|api gateway|step func|event/)) return FREE_RESOURCES.serverless;
+  if (t.match(/monitor|cloudwatch|cloudtrail|log|x-ray|observ|metric|alarm/)) return FREE_RESOURCES.monitoring;
+  if (t.match(/devops|pipeline|deploy|ci|cd|codebuild|codedeploy|cloudformation|cdk|container|ecs|eks|docker|terraform/)) return FREE_RESOURCES.devops;
+  if (t.match(/ml|machine learn|ai|sagemaker|bedrock|model|neural|nlp|vision|rekognition/)) return FREE_RESOURCES.ml;
+  if (t.match(/cost|pricing|bill|budget|saving|tco|free tier|reserve/)) return FREE_RESOURCES.cost;
+  return FREE_RESOURCES.general;
+}
+
+function switchQuestTab(tabId, panelId, cardEl) {
+  cardEl.querySelectorAll('.quest-tab').forEach(function(t){ t.classList.remove('active'); });
+  cardEl.querySelectorAll('.quest-tab-panel').forEach(function(p){ p.classList.remove('active'); });
+  var tab = cardEl.querySelector('[data-tab="'+tabId+'"]');
+  var panel = cardEl.querySelector('[data-panel="'+panelId+'"]');
+  if(tab) tab.classList.add('active');
+  if(panel) panel.classList.add('active');
+}
+window.switchQuestTab = switchQuestTab;
+
+// ═══ RENDER QUEST CARD ═══
+function buildQuestCard(quest, qkey, qtype, questIndex, dungeonId) {
+  var qState = getQuestState(qkey);
+  var isSide = qtype === 's';
+  var tips;
+  if (quest.bullets && quest.bullets.length > 0) {
+    tips = quest.bullets;
+  } else {
+    tips = getStudyTips(state.examId, dungeonId, qtype, questIndex);
+  }
+  var gearObj = quest.gear ? getGear(quest.gear) : null;
+  var lessonUrl = getQuestLessonUrl(quest);
+
+  var card = document.createElement('div');
+
+  if (qState === 'complete') {
+    card.className = 'quest-card' + (isSide ? ' side' : '') + ' done';
+    card.innerHTML =
+      '<div class="flex items-center gap-3">' +
+        '<span class="text-2xl">✅</span>' +
+        '<div class="flex-1">' +
+          '<p class="font-display text-sm" style="color:var(--gold);">Quest Conquered</p>' +
+          '<p class="font-body text-sm" style="color:var(--parchment);">' + quest.name + '</p>' +
+          '<p class="text-xs mt-1" style="color:#4caf50;">+' + quest.xp + ' XP Earned</p>' +
+        '</div>' +
+      '</div>';
+  } else if (qState === 'active') {
+    var tipsHtml = '';
+    for (var t = 0; t < tips.length; t++) {
+      tipsHtml += '<div class="study-bullet">' + tips[t] + '</div>';
+    }
+    var rewardHtml = '<span class="loot-badge">⚡ ' + quest.xp + ' XP</span>';
+    if (gearObj) {
+      rewardHtml += ' <span class="loot-badge">' + gearObj.emoji + ' ' + gearObj.name + ' <span style="color:var(--fire);">(' + gearObj.rarity + ')</span></span>';
+    }
+
+    // Build free resources HTML
+    var freeRes = getFreeResources(quest.lesson);
+    var resHtml = '';
+    for (var r = 0; r < freeRes.length; r++) {
+      var res = freeRes[r];
+      var badgeCls = res.badge === 'video' ? 'badge-video' : (res.badge === 'official' ? 'badge-official' : 'badge-free');
+      var badgeLabel = res.badge === 'video' ? '▶ Video' : (res.badge === 'official' ? '📘 Official Docs' : '✓ Free');
+      resHtml +=
+        '<div class="resource-item">' +
+          '<div class="resource-item-icon">' + res.icon + '</div>' +
+          '<div class="resource-item-body">' +
+            '<div class="resource-item-title">' + res.title + '</div>' +
+            '<div class="resource-item-desc">' + res.desc + '</div>' +
+            '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
+              '<span class="resource-item-badge ' + badgeCls + '">' + badgeLabel + '</span>' +
+              '<a href="' + res.url + '" target="_blank" rel="noopener noreferrer" class="resource-link">→ ' + res.link + '</a>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    }
+
+    var cardId = 'qcard-' + qkey.replace(/[^a-z0-9]/gi, '-');
+    card.className = 'quest-card active-quest quest-expand' + (isSide ? ' side' : '');
+    card.setAttribute('id', cardId);
+    card.innerHTML =
+      '<p class="font-display text-base mb-1" style="color:var(--gold-bright);">📖 Quest Accepted: ' + quest.name + '</p>' +
+      '<hr class="quest-divider">' +
+      '<p class="font-body italic text-sm mt-2 mb-3" style="color:var(--parchment-dark);">"' + quest.flavor + '"</p>' +
+      // Tabs
+      '<div class="quest-tabs">' +
+        '<button class="quest-tab active" data-tab="study" onclick="switchQuestTab(\'study\',\'study-panel\',document.getElementById(\'' + cardId + '\'))">📚 Study Notes</button>' +
+        '<button class="quest-tab" data-tab="resources" onclick="switchQuestTab(\'resources\',\'resources-panel\',document.getElementById(\'' + cardId + '\'))">🆓 Free Resources</button>' +
+      '</div>' +
+      // Study Notes Panel
+      '<div class="quest-tab-panel active" data-panel="study-panel">' +
+        '<div class="study-panel">' +
+          '<p class="font-display text-xs mb-2" style="color:var(--gold);letter-spacing:1px;">📚 The Dungeon Master\'s Study Notes:</p>' +
+          '<p class="text-xs mb-2" style="color:var(--parchment);">Reference: <span style="color:var(--fire);">' + quest.lesson + '</span></p>' +
+          tipsHtml +
+          '<p class="text-xs mt-3"><a href="' + lessonUrl + '" target="_blank" rel="noopener noreferrer" class="study-link">🔗 Open Study Resource → ' + quest.lesson + '</a></p>' +
+        '</div>' +
+      '</div>' +
+      // Free Resources Panel
+      '<div class="quest-tab-panel" data-panel="resources-panel">' +
+        '<div style="margin-top:4px;">' +
+          '<p class="font-display text-xs mb-3" style="color:var(--gold);letter-spacing:1px;">🆓 Free Learning Resources for This Quest:</p>' +
+          resHtml +
+          '<p class="text-xs mt-2" style="color:var(--parchment-dark);font-style:italic;">All resources above are 100% free. Official AWS docs never require payment.</p>' +
+        '</div>' +
+      '</div>' +
+      // Rewards + button
+      '<div class="mt-3 mb-2">' +
+        '<p class="font-display text-xs mb-2" style="color:var(--gold);letter-spacing:1px;">⚡ Rewards upon completion:</p>' +
+        '<div class="flex flex-wrap gap-2">' + rewardHtml + '</div>' +
+      '</div>' +
+      '<div class="mt-3"><button class="btn-complete quest-complete-btn" data-qkey="' + qkey + '" data-qxp="' + quest.xp + '" data-qgear="' + (quest.gear || '') + '" data-qname="' + quest.name.replace(/"/g, '&quot;') + '" data-qtype="' + qtype + '" data-qindex="' + questIndex + '" data-qside="' + (isSide ? '1' : '0') + '" data-dungeonid="' + dungeonId + '">⚔️ Begin Quest Trial — Prove Your Knowledge</button></div>';
+  } else {
+    card.className = 'quest-card' + (isSide ? ' side' : '');
+    card.innerHTML =
+      '<p class="font-display text-sm mb-1" style="color:var(--gold);">' + quest.name + '</p>' +
+      '<p class="font-body text-xs italic mb-2" style="color:var(--parchment-dark);">' + quest.flavor + '</p>' +
+      '<p class="text-xs mb-1" style="color:var(--sapphire);">📚 ' + quest.lesson + '</p>' +
+      '<p class="text-xs mb-2" style="color:var(--fire);">⚡ Reward: ' + quest.xp + ' XP' + (quest.gear ? ' + 🎁 Gear' : '') + '</p>' +
+      '<button class="btn-accept quest-accept-btn" data-qkey="' + qkey + '">⚔️ Accept Quest</button>';
+  }
+
+  return card;
+}
+
+// ═══ RENDER QUESTS ═══
+function renderQuests(){
+  var exam=EXAMS[state.examId];
+  var d=exam.dungeons[state.currentDungeon];
+  document.getElementById('quest-dungeon-title').textContent=d.emoji+' '+d.name;
+  var ql=document.getElementById('quest-log');
+  ql.innerHTML='<h3 class="font-display text-lg mb-3" style="color:var(--gold);">📜 Main Quests</h3>';
+
+  var mainDone=0;
+  d.mainQuests.forEach(function(q,i){
+    var key=state.examId+'_'+d.id+'_m'+i;
+    if(getQuestState(key)==='complete') mainDone++;
+    var card = buildQuestCard(q, key, 'm', i, d.id);
+    ql.appendChild(card);
+  });
+
+  var sideHeader = document.createElement('h3');
+  sideHeader.className = 'font-display text-lg mb-3 mt-4';
+  sideHeader.style.color = 'var(--fire)';
+  sideHeader.textContent = '⚡ Side Quests';
+  ql.appendChild(sideHeader);
+
+  d.sideQuests.forEach(function(q,i){
+    var key=state.examId+'_'+d.id+'_s'+i;
+    var card = buildQuestCard(q, key, 's', i, d.id);
+    ql.appendChild(card);
+  });
+
+  var bossLocked=mainDone<3;
+  var bossDiv = document.createElement('div');
+  bossDiv.className = 'mt-4 text-center';
+  var bossBtn = document.createElement('button');
+  bossBtn.className = 'boss-btn' + (bossLocked ? ' locked' : ' unlocked');
+  bossBtn.id = 'btn-boss';
+  bossBtn.textContent = bossLocked ? '🔒 Complete all main quests first' : '⚔️ FACE THE DUNGEON BOSS';
+  bossDiv.appendChild(bossBtn);
+  ql.appendChild(bossDiv);
+
+  var di=document.getElementById('dungeon-info');
+  di.innerHTML='<div class="panel p-4">'+
+    '<p class="font-display text-lg mb-2" style="color:var(--gold);">'+d.emoji+' '+d.name+'</p>'+
+    '<p class="text-sm mb-2" style="color:var(--parchment);">👁️ Boss: <span style="color:var(--blood);">'+d.bossEmoji+' '+d.bossName+'</span></p>'+
+    '<p class="text-xs italic mb-3" style="color:var(--parchment-dark);">'+d.bossLore+'</p>'+
+    '<p class="text-xs mb-2" style="color:var(--fire);">Danger Level: ⚔️⚔️⚔️</p>'+
+    '<p class="text-xs mb-3" style="color:var(--parchment-dark);">Progress: '+mainDone+'/3 main quests</p>'+
+    '<div class="xp-bar-outer"><div class="xp-bar-inner" style="width:'+Math.round(mainDone/3*100)+'%;"></div></div>'+
+  '</div>';
+
+  // Wire accept buttons
+  ql.querySelectorAll('.quest-accept-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var qkey=this.getAttribute('data-qkey');
+      setQuestState(qkey, 'active');
+      renderQuests();
+    });
+  });
+
+  // Wire complete buttons → now opens Quest Trial instead of direct completion
+  ql.querySelectorAll('.quest-complete-btn').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      var qkey=this.getAttribute('data-qkey');
+      var qxp=parseInt(this.getAttribute('data-qxp'));
+      var qgear=this.getAttribute('data-qgear');
+      var qname=this.getAttribute('data-qname');
+      var qtype=this.getAttribute('data-qtype');
+      var qindex=parseInt(this.getAttribute('data-qindex'));
+      var qside=this.getAttribute('data-qside')==='1';
+      var dungeonId=parseInt(this.getAttribute('data-dungeonid'));
+      openQuestTrial(qkey, qxp, qgear, qname, qside, state.examId, dungeonId, qtype, qindex);
+    });
+  });
+
+  document.getElementById('btn-boss').addEventListener('click',function(){
+    if(bossLocked)return;
+    state.bossQIdx=0;state.bossScore=0;state.bossAnswers=[];
+    saveState();
+    renderBossIntro();
+    showPage('page-boss');
+  });
+}
+
+// ═══ BOSS ENCOUNTER ═══
+function renderBossIntro(){
+  var exam=EXAMS[state.examId];
+  var d=exam.dungeons[state.currentDungeon];
+  var bc=document.getElementById('boss-content');
+  refreshSpCharges();
+  var _zones=getDungeonsConquered();
+  var _sp=activeSpell(state.classId,_zones);
+  var _spHtml='';
+  if(_sp){
+    var _c=spCharges(_sp.id);
+    _spHtml='<div class="panel p-4 mb-5 max-w-md mx-auto" style="border-color:rgba(200,80,10,0.5);background:rgba(200,80,10,0.08);">'+
+      '<p class="font-display text-xs mb-1" style="color:var(--fire);letter-spacing:1px;">⚗️ YOUR BATTLE SPELL</p>'+
+      '<p class="font-body text-base font-semibold mb-1" style="color:var(--parchment);">'+_sp.emoji+' '+_sp.name+'</p>'+
+      '<p class="font-body text-sm mb-1" style="color:var(--parchment-dark);">'+_sp.desc+'</p>'+
+      '<p class="font-display text-xs" style="color:var(--gold);">'+_c+' charge'+(_c!==1?'s':'')+' this battle</p>'+
+    '</div>';
+  }
+  bc.innerHTML = '<div class="text-center max-w-2xl mx-auto py-8">'+
+    '<div class="text-8xl mb-6" style="animation:pulse 2s infinite;">'+d.bossEmoji+'</div>'+
+    '<h2 class="font-display text-3xl md:text-4xl mb-3" style="color:var(--blood);text-shadow:0 0 20px rgba(139,0,0,0.5);">'+d.bossName+'</h2>'+
+    '<p class="font-body text-lg italic mb-6" style="color:var(--parchment-dark);">'+d.bossLore+'</p>'+
+    '<div class="panel p-4 mb-4 max-w-md mx-auto">'+
+      '<p class="font-display text-sm mb-2" style="color:var(--gold);">⚠️ The Final Trial Awaits</p>'+
+      '<p class="font-body" style="color:var(--parchment);">Face <strong>5 questions</strong> in the crucible of combat. Answer 3 or more correctly to defeat the boss and claim the dungeon\'s treasure. Failure means retreat — but you may try again.</p>'+
+    '</div>'+
+    _spHtml+
+    '<div class="flex gap-4 justify-center flex-wrap">'+
+      '<button class="btn-primary" onclick="renderBossQuestion()">⚔️ Begin Battle</button>'+
+      '<button class="btn-secondary" onclick="renderMap();showPage(\'page-map\');">🗺️ Retreat to Map</button>'+
+    '</div>'+
+  '</div>';
+  state.bossQIdx = 0;
+  state.bossScore = 0;
+  state.bossAnswers = [];
+  window._spRetry=false; window._spDblXp=false; window._spNoPen=false;
+  saveState();
+}
+window.renderBossIntro = renderBossIntro;
+
+// ═══ BOSS QUESTION ═══
+function renderBossQuestion(){
+  var exam = EXAMS[state.examId];
+  var d = exam.dungeons[state.currentDungeon];
+  var bc = document.getElementById('boss-content');
+  var qi = state.bossQIdx;
+  if(qi >= d.bossQuestions.length){ renderBossResult(); return; }
+  var q = d.bossQuestions[qi];
+  // Shuffle boss answer choices
+  var _bsh = shuffleAnswers(q.opts, q.correct, (Date.now() + qi * 1337) | 0);
+  window._bossShuffledCorrect = _bsh.correct;
+  var opts = _bsh.opts.map(function(o,i){
+    return '<button class="trial-answer-btn" id="bossopt'+i+'" onclick="bossAnswer('+i+')">'+String.fromCharCode(65+i)+'. '+o+'</button>';
+  }).join('');
+  // Build spell button HTML (safe — no IIFE in strings)
+  var _bqZones=getDungeonsConquered();
+  var _bqSp=activeSpell(state.classId,_bqZones);
+  // item bar (spell + shop items) is built by buildBossItemBar
+  bc.innerHTML = '<div class="max-w-2xl mx-auto py-6 w-full px-4">'+
+    '<div class="flex items-center justify-between mb-4">'+
+      '<div class="text-4xl">'+d.bossEmoji+'</div>'+
+      '<div class="trial-score-bar">Question '+(qi+1)+' / '+d.bossQuestions.length+'</div>'+
+      '<div class="trial-score-bar">⚔️ Hits: '+state.bossScore+'</div>'+
+    '</div>'+
+
+    buildBossItemBar(_bqSp)+
+    '<div class="panel p-6 mb-6">'+
+      '<p class="font-display text-xs mb-3" style="color:var(--gold);letter-spacing:1px;">THE BOSS CHALLENGES THEE</p>'+
+      '<p class="font-body text-lg" style="color:var(--parchment);">'+q.q+'</p>'+
+    '</div>'+
+    '<div class="flex flex-col gap-3 mb-6" id="boss-opts">'+opts+'</div>'+
+    '<div id="boss-feedback" style="display:none;" class="panel p-4 mb-4"></div>'+
+    '<div id="boss-next-wrap" style="display:none;" class="text-center">'+
+      '<button class="btn-primary" onclick="bossNextQ()">'+
+        (qi+1 < d.bossQuestions.length ? 'Next Question ⚔️' : 'See Result 🏆')+
+      '</button>'+
+    '</div>'+
+  '</div>';
+  window._spRetry=false; window._spDblXp=false; window._spNoPen=false; window._spRetryUsed=false;
+}
+window.renderBossQuestion = renderBossQuestion;
+
+function bossAnswer(idx){
+  var exam = EXAMS[state.examId];
+  var d = exam.dungeons[state.currentDungeon];
+  var q = d.bossQuestions[state.bossQIdx];
+  var correct = (window._bossShuffledCorrect !== undefined) ? window._bossShuffledCorrect : q.correct;
+  var isCorrect = (idx === correct);
+  // Phoenix Feather: override wrong answer to correct this question
+  if (!isCorrect && window._phoenixThisQ) {
+    window._phoenixThisQ = false;
+    isCorrect = true;
+    showToast('🪶 Phoenix Feather blazes — wrong answer forgiven!');
+  }
+  // Retry mechanic
+  if(!isCorrect && window._spRetry && !window._spRetryUsed){
+    window._spRetryUsed=true; window._spRetry=false;
+    var wb2=document.getElementById('bossopt'+idx);
+    if(wb2){wb2.style.opacity='0.25';wb2.style.pointerEvents='none';wb2.style.textDecoration='line-through';}
+    var fb2=document.getElementById('boss-feedback');
+    if(fb2){fb2.style.display='block';fb2.innerHTML='<p class="font-display text-sm" style="color:var(--fire);">🔄 Wrong — but your spell lets you try again!</p>';}
+    return;
+  }
+  // Disable all buttons
+  for(var i=0;i<q.opts.length;i++){
+    var btn=document.getElementById('bossopt'+i);
+    if(btn){btn.classList.add('disabled');btn.onclick=null;}
+  }
+  if(isCorrect){
+    state.bossScore++;
+    if(window._spDblXp){gainXP(30);window._spDblXp=false;showToast('⚡ Double XP! +30 bonus!');}
+  }
+  var cBtn=document.getElementById('bossopt'+correct);
+  var wBtn=document.getElementById('bossopt'+idx);
+  if(cBtn) cBtn.classList.add('correct');
+  if(!isCorrect && wBtn) wBtn.classList.add('wrong');
+  var fb=document.getElementById('boss-feedback');
+  if(fb){
+    fb.style.display='block';
+    fb.innerHTML='<p class="font-display text-sm mb-1" style="color:'+(isCorrect?'#4caf50':'var(--blood)')+';">'+(isCorrect?'⚔️ A direct hit!':'💀 The boss strikes back!')+'</p>'+
+    '<p class="font-body text-sm" style="color:var(--parchment-dark);">'+q.explain+'</p>';
+  }
+  var nw=document.getElementById('boss-next-wrap');
+  if(nw) nw.style.display='block';
+  state.bossAnswers.push(idx);
+  saveState();
+}
+window.bossAnswer = bossAnswer;
+
+function castSpell(){
+  var _zones=getDungeonsConquered();
+  var sp=activeSpell(state.classId,_zones);
+  if(!sp||spCharges(sp.id)<=0) return;
+  useSpCharge(sp.id);
+  var btn=document.getElementById('spell-btn');
+  if(btn){btn.disabled=true;btn.classList.add('depleted');var nc=spCharges(sp.id);btn.innerHTML=sp.emoji+' '+sp.name+'<span class="spell-charges">'+nc+'✦</span>';}
+  var exam=EXAMS[state.examId],d=exam.dungeons[state.currentDungeon],q=d.bossQuestions[state.bossQIdx];
+  if(sp.effect==='elim1'||sp.effect==='elim2'){
+    var _spCorrectIdx=(window._bossShuffledCorrect!==undefined)?window._bossShuffledCorrect:q.correct;
+    var wrongs=[];for(var i=0;i<q.opts.length;i++) if(i!==_spCorrectIdx) wrongs.push(i);
+    wrongs.sort(function(){return Math.random()-0.5;});
+    var kill=sp.effect==='elim2'?Math.min(2,wrongs.length):1;
+    for(var j=0;j<kill;j++){var wb=document.getElementById('bossopt'+wrongs[j]);if(wb){wb.style.opacity='0.2';wb.style.pointerEvents='none';wb.style.textDecoration='line-through';}}
+    showToast(sp.emoji+' '+sp.name+'! '+kill+' wrong answer'+(kill>1?'s':'')+' eliminated!');
+  } else if(sp.effect==='skip'){
+    for(var k=0;k<q.opts.length;k++){var sb=document.getElementById('bossopt'+k);if(sb){sb.style.opacity='0.2';sb.style.pointerEvents='none';}}
+    state.bossAnswers.push(-1); saveState();
+    document.getElementById('boss-next-wrap').style.display='block';
+    showToast(sp.emoji+' '+sp.name+'! Question skipped — no penalty.');
+  } else if(sp.effect==='retry'){
+    window._spRetry=true;
+    showToast(sp.emoji+' '+sp.name+'! You may retry this question once if wrong.');
+  } else if(sp.effect==='dblxp'){
+    window._spDblXp=true;
+    showToast(sp.emoji+' '+sp.name+'! Next correct answer grants +30 bonus XP!');
+  } else if(sp.effect==='auto'){
+    window._spDblXp=false;
+    for(var ai=0;ai<q.opts.length;ai++){var ab=document.getElementById('bossopt'+ai);if(ab){ab.style.opacity='0.15';ab.style.pointerEvents='none';}}
+    var _hiIdx=(window._bossShuffledCorrect!==undefined)?window._bossShuffledCorrect:q.correct;
+    var cb=document.getElementById('bossopt'+_hiIdx);
+    if(cb){cb.style.opacity='1';cb.style.boxShadow='0 0 25px rgba(200,80,10,0.9)';cb.style.borderColor='var(--gold-bright)';}
+    showToast(sp.emoji+' '+sp.name+'! The answer reveals itself…',1400);
+    var _autoIdx=(window._bossShuffledCorrect!==undefined)?window._bossShuffledCorrect:q.correct;
+    setTimeout(function(){bossAnswer(_autoIdx);},1100);
+  }
+}
+window.castSpell=castSpell;
+
+
+function bossNextQ(){
+  state.bossQIdx++;
+  saveState();
+  if(state.bossQIdx >= EXAMS[state.examId].dungeons[state.currentDungeon].bossQuestions.length){
+    renderBossResult();
+  } else {
+    renderBossQuestion();
+  }
+}
+window.bossNextQ = bossNextQ;
+
+// ═══ BOSS RESULT ═══
+function renderBossResult(){
+  var exam = EXAMS[state.examId];
+  var d = exam.dungeons[state.currentDungeon];
+  var bc = document.getElementById('boss-content');
+  var passed = state.bossScore >= 3;
+  var dungeonKey = state.examId+'_'+(state.currentDungeon+1);
+  if(passed && state.dungeonsDone.indexOf(dungeonKey) === -1){
+    var _oldZ = getDungeonsConquered();
+    state.dungeonsDone.push(dungeonKey);
+    var _newZ = getDungeonsConquered();
+    gainXP(500);
+    var gear = addGear();
+    var gearMsg = gear ? '🎁 You found: '+gear.emoji+' <em>'+gear.name+'</em>!' : '';
+    var _ns = spellForZone(state.classId, _newZ);
+    var spellMsg = _ns ? _ns.emoji+' Spell Unlocked: <strong>'+_ns.name+'</strong> — '+_ns.desc : '';
+    if(_ns){ if(!state.spellCharges) state.spellCharges={}; state.spellCharges[_ns.id]=_ns.charges; }
+    saveState();
+    bc.innerHTML = '<div class="text-center max-w-lg mx-auto py-8">'+
+      '<div class="text-8xl mb-4 trial-victory">🏆</div>'+
+      '<h2 class="font-display text-4xl mb-3" style="color:var(--gold-bright);text-shadow:0 0 30px rgba(245,200,66,0.6);">'+d.bossName+' Defeated!</h2>'+
+      '<p class="font-body text-xl mb-2" style="color:var(--parchment);">You answered <strong>'+state.bossScore+' / '+d.bossQuestions.length+'</strong> correctly.</p>'+
+      '<p class="font-body text-lg italic mb-4" style="color:var(--gold);">+500 XP Awarded!</p>'+
+      (gearMsg ? '<p class="font-body text-lg mb-3" style="color:var(--fire);">'+gearMsg+'</p>' : '')+
+      (spellMsg ? '<p class="font-body text-lg mb-3" style="color:var(--fire);">'+spellMsg+'</p>' : '')+
+      '<div class="panel p-4 mb-6">'+
+        '<p class="font-body italic" style="color:var(--parchment-dark);">"The dungeon falls silent. You stand victorious in the AWS Cloud Realm."</p>'+
+      '</div>'+
+      '<div class="flex gap-4 justify-center flex-wrap">'+
+        '<button class="btn-primary" onclick="renderMap();showPage(\'page-map\');">🗺️ Return to Map</button>'+
+      '</div>'+
+    '</div>';
+    setTimeout(function(){ checkAndShowRankUp(_oldZ, _newZ); }, 1800);
+  } else if(passed){
+    bc.innerHTML = '<div class="text-center max-w-lg mx-auto py-8">'+
+      '<div class="text-8xl mb-4">✅</div>'+
+      '<h2 class="font-display text-3xl mb-3" style="color:var(--gold);">Already Conquered!</h2>'+
+      '<p class="font-body text-lg mb-2" style="color:var(--parchment);">'+state.bossScore+' / '+d.bossQuestions.length+' correct. This dungeon is already in your legend.</p>'+
+      '<button class="btn-primary mt-4" onclick="renderMap();showPage(\'page-map\');">🗺️ Return to Map</button>'+
+    '</div>';
+  } else {
+    bc.innerHTML = '<div class="text-center max-w-lg mx-auto py-8">'+
+      '<div class="text-8xl mb-4">💀</div>'+
+      '<h2 class="font-display text-3xl mb-3" style="color:var(--blood);">Defeated!</h2>'+
+      '<p class="font-body text-lg mb-2" style="color:var(--parchment);">You answered only <strong>'+state.bossScore+' / '+d.bossQuestions.length+'</strong> correctly. You need at least 3 to prevail.</p>'+
+      '<p class="font-body italic mb-6" style="color:var(--parchment-dark);">"Return to your studies, adventurer. The boss will wait."</p>'+
+      '<div class="flex gap-4 justify-center flex-wrap">'+
+        '<button class="btn-primary" onclick="renderBossIntro()">⚔️ Try Again</button>'+
+        '<button class="btn-secondary" onclick="renderQuests();showPage(\'page-quests\');">📜 Back to Quests</button>'+
+      '</div>'+
+    '</div>';
+  }
+}
+window.renderBossResult = renderBossResult;
+
+
+// ═══ SHOP SYSTEM ═══
+var SHOP_ITEMS = [
+  {id:'firebolt', name:'Scroll of Firebolt', emoji:'📜🔥', desc:'Eliminate 2 wrong answers on any question.', effect:'elim2', price:80, color:'#c8500a'},
+  {id:'oracle',   name:'Scroll of the Oracle', emoji:'📜🔮', desc:'Reveals whether your first instinct is correct.', effect:'hint', price:60, color:'#6a3d9a'},
+  {id:'phoenix',  name:'Phoenix Feather',       emoji:'🪶🔥', desc:'Auto-pass one failed trial (once per dungeon).', effect:'revive', price:120, color:'#d4a017'}
+];
+
+function getShopScrollCount(itemId) {
+  if (!state.shopScrolls) state.shopScrolls = {};
+  return state.shopScrolls[itemId] || 0;
+}
+function addShopScroll(itemId, n) {
+  if (!state.shopScrolls) state.shopScrolls = {};
+  state.shopScrolls[itemId] = (state.shopScrolls[itemId] || 0) + n;
+  saveState();
+}
+function useShopScroll(itemId) {
+  var c = getShopScrollCount(itemId);
+  if (c <= 0) return false;
+  state.shopScrolls[itemId] = c - 1;
+  saveState();
+  return true;
+}
+
+function openShop() {
+  var backdrop = document.getElementById('shop-backdrop');
+  var overlay = document.getElementById('shop-overlay');
+  if (!backdrop || !overlay) return;
+  renderShop();
+  backdrop.classList.add('open');
+  overlay.classList.add('open');
+}
+function closeShop() {
+  var backdrop = document.getElementById('shop-backdrop');
+  var overlay = document.getElementById('shop-overlay');
+  if (backdrop) backdrop.classList.remove('open');
+  if (overlay) overlay.classList.remove('open');
+}
+window.openShop = openShop;
+window.closeShop = closeShop;
+
+function renderShop() {
+  var sc = document.getElementById('shop-content');
+  if (!sc) return;
+  if (!state.gold) state.gold = 0;
+  sc.innerHTML =
+    '<p class="font-body text-sm mb-4 text-center" style="color:var(--parchment-dark);">Spend your hard-earned gold on powerful scrolls. Gold is earned by completing quests and defeating bosses.</p>' +
+    '<div class="panel p-3 mb-4 text-center"><span class="font-display text-lg" style="color:var(--gold);">💰 ' + state.gold + ' Gold</span></div>' +
+    SHOP_ITEMS.map(function(item) {
+      var owned = getShopScrollCount(item.id);
+      var canBuy = state.gold >= item.price;
+      return '<div class="panel p-4 mb-3" style="border-color:' + item.color + '44;">' +
+        '<div class="flex items-center gap-3 mb-2">' +
+          '<span style="font-size:2rem;">' + item.emoji + '</span>' +
+          '<div class="flex-1">' +
+            '<p class="font-display text-sm" style="color:var(--gold);">' + item.name + '</p>' +
+            '<p class="font-body text-xs" style="color:var(--parchment-dark);">' + item.desc + '</p>' +
+          '</div>' +
+          '<div class="text-right">' +
+            '<p class="font-display text-xs mb-1" style="color:var(--fire);">💰 ' + item.price + '</p>' +
+            '<p class="font-body text-xs" style="color:var(--gold);">Owned: ' + owned + '</p>' +
+          '</div>' +
+        '</div>' +
+        '<button onclick="buyShopItem(\'' + item.id + '\')" class="btn-accept w-full text-sm" ' + (canBuy ? '' : 'disabled style="opacity:0.4;cursor:not-allowed;"') + '>Buy Scroll</button>' +
+      '</div>';
+    }).join('');
+}
+window.renderShop = renderShop;
+
+function buyShopItem(itemId) {
+  var item = SHOP_ITEMS.find(function(x) { return x.id === itemId; });
+  if (!item) return;
+  if (!state.gold || state.gold < item.price) {
+    alert('Not enough gold, adventurer! Complete more quests to earn gold.');
+    return;
+  }
+  state.gold -= item.price;
+  addShopScroll(itemId, 1);
+  saveState();
+  renderShop();
+  // Update gold display in char sheet if visible
+  var goldEl = document.querySelector('[data-gold-display]');
+  if (goldEl) goldEl.textContent = '💰 Gold: ' + state.gold;
+}
+window.buyShopItem = buyShopItem;
+
+// ═══ ITEM / SPELL BAR BUILDERS ═══
+
+function buildItemBtn(emoji, label, count, onclick, extraStyle) {
+  var disabled = count <= 0;
+  var style = 'font-size:0.72rem;padding:6px 12px;' + (extraStyle||'');
+  if (disabled) {
+    return '<button class="spell-btn" disabled style="'+style+'" title="Buy at the shop">'+emoji+' '+label+' <span class="spell-charges">0✦</span></button>';
+  }
+  return '<button class="spell-btn" style="'+style+'" onclick="'+onclick+'()">'+emoji+' '+label+' <span class="spell-charges">'+count+'✦</span></button>';
+}
+
+// Bar shown inside quest trials (class spell + all shop items)
+function buildTrialItemBar() {
+  var zones = getDungeonsConquered();
+  var sp = activeSpell(state.classId, zones);
+  var spBtn = '';
+  if (sp) {
+    var c = spCharges(sp.id);
+    if (c > 0) {
+      spBtn = '<button class="spell-btn" style="font-size:0.72rem;padding:6px 12px;" onclick="castTrialSpell()">'+sp.emoji+' '+sp.name+'<span class="spell-charges">'+c+'✦</span></button>';
+    } else {
+      spBtn = '<button class="spell-btn" disabled style="font-size:0.72rem;padding:6px 12px;">'+sp.emoji+' '+sp.name+'<span class="spell-charges">0✦</span></button>';
+    }
+  }
+  return '<div class="flex flex-wrap justify-end gap-2 mb-3">'+
+    spBtn +
+    buildItemBtn('🔥','Firebolt', getShopScrollCount('firebolt'), 'useFirebolt') +
+    buildItemBtn('🔮','Oracle',   getShopScrollCount('oracle'),   'useOracle') +
+    buildItemBtn('🪶','Phoenix',  getShopScrollCount('phoenix'),  'usePhoenix') +
+  '</div>';
+}
+window.buildTrialItemBar = buildTrialItemBar;
+
+// Bar shown inside boss questions (class spell already shown separately, just shop items)
+function buildBossItemBar(sp) {
+  var spBtn = '';
+  if (sp) {
+    var c = spCharges(sp.id);
+    if (c > 0) {
+      spBtn = '<button class="spell-btn" id="spell-btn" style="font-size:0.72rem;padding:6px 12px;" onclick="castSpell()">'+sp.emoji+' Cast '+sp.name+'<span class="spell-charges">'+c+'✦</span></button>';
+    } else {
+      spBtn = '<button class="spell-btn" disabled style="font-size:0.72rem;padding:6px 12px;">'+sp.emoji+' '+sp.name+'<span class="spell-charges">0✦</span></button>';
+    }
+  }
+  return '<div class="flex flex-wrap justify-end gap-2 mb-3">'+
+    spBtn +
+    buildItemBtn('🔥','Firebolt', getShopScrollCount('firebolt'), 'useFirebolt') +
+    buildItemBtn('🔮','Oracle',   getShopScrollCount('oracle'),   'useOracle') +
+    buildItemBtn('🪶','Phoenix',  getShopScrollCount('phoenix'),  'usePhoenix') +
+  '</div>';
+}
+window.buildBossItemBar = buildBossItemBar;
+
+// Cast class spell during a quest trial (skip-wrong-answer / double-xp / retry effects)
+function castTrialSpell() {
+  var zones = getDungeonsConquered();
+  var sp = activeSpell(state.classId, zones);
+  if (!sp) return;
+  if (!useSpCharge(sp.id)) { showToast('No charges left!'); return; }
+  if (sp.effect === 'elim') {
+    // Eliminate 1 wrong answer
+    var btns = document.querySelectorAll('.trial-answer-btn:not(.disabled):not(.correct):not(.wrong)');
+    var wrongs = [];
+    btns.forEach(function(b) { if (!b.getAttribute('data-iscorrect')) wrongs.push(b); });
+    wrongs.sort(function(){return Math.random()-0.5;});
+    if (wrongs[0]) { wrongs[0].style.opacity='0.2'; wrongs[0].style.pointerEvents='none'; wrongs[0].style.textDecoration='line-through'; }
+    showToast(sp.emoji+' '+sp.name+': eliminated a wrong answer!');
+  } else if (sp.effect === 'dblxp') {
+    window._trialDblXp = true;
+    showToast(sp.emoji+' '+sp.name+': next correct answer gives +50 bonus XP!');
+  } else if (sp.effect === 'retry') {
+    window._trialRetry = true;
+    showToast(sp.emoji+' '+sp.name+': if you answer wrong, you get one retry!');
+  } else if (sp.effect === 'shield') {
+    window._trialNoPen = true;
+    showToast(sp.emoji+' '+sp.name+': wrong answer won't cost you this question!');
+  } else {
+    showToast(sp.emoji+' '+sp.name+' activated!');
+  }
+  // Refresh the item bar
+  var bar = document.querySelector('.flex.flex-wrap.justify-end.gap-2.mb-3');
+  if (bar) bar.outerHTML = buildTrialItemBar();
+}
+window.castTrialSpell = castTrialSpell;
+
+// Oracle: reveal whether the answer you're about to pick is correct
+function useOracle() {
+  if (!useShopScroll('oracle')) { showToast('No Scrolls of the Oracle remaining! Buy at the shop.'); return; }
+  var inBoss = document.querySelector('#boss-opts') !== null;
+  if (inBoss) {
+    var correctIdx = (window._bossShuffledCorrect !== undefined) ? window._bossShuffledCorrect : -1;
+    if (correctIdx >= 0) {
+      var cb = document.getElementById('bossopt'+correctIdx);
+      if (cb) { cb.style.boxShadow='0 0 18px 4px rgba(100,220,100,0.7)'; cb.style.borderColor='#4caf50'; }
+      showToast('🔮 The Oracle whispers: the glowing answer is correct! ('+getShopScrollCount('oracle')+' remaining)');
+    }
+  } else {
+    // Trial: highlight the correct answer button
+    var btns = document.querySelectorAll('.trial-answer-btn');
+    btns.forEach(function(b) {
+      if (b.getAttribute('data-iscorrect') === '1') {
+        b.style.boxShadow='0 0 18px 4px rgba(100,220,100,0.7)';
+        b.style.borderColor='#4caf50';
+      }
+    });
+    showToast('🔮 The Oracle reveals the correct answer! ('+getShopScrollCount('oracle')+' remaining)');
+  }
+}
+window.useOracle = useOracle;
+
+// Phoenix Feather: auto-pass one failed trial or give a full score restore in boss
+function usePhoenix() {
+  if (!useShopScroll('phoenix')) { showToast('No Phoenix Feathers remaining! Buy at the shop.'); return; }
+  var inBoss = document.querySelector('#boss-opts') !== null;
+  if (inBoss) {
+    // In boss: treat current question as correct
+    window._phoenixThisQ = true;
+    showToast('🪶 Phoenix Feather: the next wrong answer you give will count as correct! ('+getShopScrollCount('phoenix')+' remaining)');
+  } else {
+    // In trial: auto-pass the current question (mark as correct without answering)
+    if (window.trialAnswered) { showToast('🪶 Already answered this question — save the Phoenix for the next one!'); addShopScroll('phoenix',1); return; }
+    window.trialAnswered = true;
+    window.trialScore = (window.trialScore||0) + 1;
+    // Mark all buttons disabled, show feedback
+    document.querySelectorAll('.trial-answer-btn').forEach(function(b){
+      b.classList.add('disabled');
+      if (b.getAttribute('data-iscorrect') === '1') b.classList.add('correct');
+    });
+    var fb = document.getElementById('trial-feedback');
+    if (fb) { fb.style.display='block'; fb.innerHTML='<p style="color:#d4a017;" class="font-display text-sm">🪶 Phoenix Feather used! This question auto-passes.</p>'; }
+    var tn = document.getElementById('trial-next');
+    if (tn) { tn.style.display='block'; }
+    showToast('🪶 Phoenix Feather burns bright — question auto-passed! ('+getShopScrollCount('phoenix')+' remaining)');
+  }
+}
+window.usePhoenix = usePhoenix;
+
+// Activate a shop scroll during a trial or boss
+function useFirebolt() {
+  if (!useShopScroll('firebolt')) {
+    showToast('No Scrolls of Firebolt remaining! Buy more at the shop.');
+    return;
+  }
+  // Determine context: boss battle or trial
+  var inBoss = document.querySelector('#boss-opts') !== null;
+  var eliminated = 0;
+  if (inBoss) {
+    // Boss: use bossopt IDs; avoid shuffled correct
+    var correctIdx = (window._bossShuffledCorrect !== undefined) ? window._bossShuffledCorrect : -1;
+    var exam = EXAMS[state.examId], d = exam ? exam.dungeons[state.currentDungeon] : null;
+    var q = d ? d.bossQuestions[state.bossQIdx] : null;
+    var total = q ? q.opts.length : 4;
+    var wrongs = [];
+    for (var i = 0; i < total; i++) {
+      if (i !== correctIdx) {
+        var wb = document.getElementById('bossopt'+i);
+        if (wb && wb.style.pointerEvents !== 'none' && wb.style.opacity !== '0.2') wrongs.push(i);
+      }
+    }
+    wrongs.sort(function(){return Math.random()-0.5;});
+    var kill = Math.min(2, wrongs.length);
+    for (var j = 0; j < kill; j++) {
+      var wb2 = document.getElementById('bossopt'+wrongs[j]);
+      if (wb2) { wb2.style.opacity='0.2'; wb2.style.pointerEvents='none'; wb2.style.textDecoration='line-through'; eliminated++; }
+    }
+  } else {
+    // Trial: use trial-answer-btn with data-correct
+    var btns = document.querySelectorAll('.trial-answer-btn:not(.disabled):not(.correct):not(.wrong)');
+    var correctVal = -1;
+    btns.forEach(function(b) { var dc = b.getAttribute('data-correct'); if (dc !== null) correctVal = parseInt(dc); });
+    var wrongBtns = [];
+    btns.forEach(function(b) { if (parseInt(b.getAttribute('data-ans')) !== correctVal) wrongBtns.push(b); });
+    wrongBtns.sort(function(){return Math.random()-0.5;});
+    var trialKill = Math.min(2, wrongBtns.length);
+    for (var k = 0; k < trialKill; k++) {
+      wrongBtns[k].style.opacity='0.3'; wrongBtns[k].style.pointerEvents='none'; wrongBtns[k].style.textDecoration='line-through'; eliminated++;
+    }
+  }
+  showToast('🔥 Firebolt eliminates ' + eliminated + ' wrong answer' + (eliminated !== 1 ? 's' : '') + '! (' + getShopScrollCount('firebolt') + ' remaining)');
+  if (document.getElementById('shop-overlay') && document.getElementById('shop-overlay').classList.contains('open')) renderShop();
+}
+window.useFirebolt = useFirebolt;
+
+function showToast(msg) {
+  var t = document.getElementById('toast-msg');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toast-msg';
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(26,18,9,0.97);border:1px solid var(--gold);color:var(--parchment);padding:10px 20px;border-radius:10px;font-family:Crimson Text,serif;font-size:0.9rem;z-index:999;text-align:center;max-width:90vw;';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(function() { t.style.display = 'none'; }, 3000);
+}
+window.showToast = showToast;
+
+// ═══ INVENTORY ═══
+function openInventory(){
+  var backdrop = document.getElementById('inv-backdrop');
+  var overlay = document.getElementById('inv-overlay');
+  var grid = document.getElementById('inv-grid');
+  if(!backdrop || !overlay || !grid) return;
+  var inv = state.inventory || [];
+  if(inv.length === 0){
+    grid.innerHTML = '<p class="font-body col-span-3 text-center italic py-8" style="color:var(--parchment-dark);">"Your satchel is empty, brave soul. Defeat dungeon bosses to earn magical gear!"</p>';
+  } else {
+    grid.innerHTML = inv.map(function(itemId){
+      var item = GEAR.find(function(g){ return g.id === itemId; });
+      if(!item) return '';
+      var rarityColor = item.rarity === 'legendary' ? 'var(--gold-bright)' : item.rarity === 'epic' ? '#a78bfa' : item.rarity === 'rare' ? '#60a5fa' : 'var(--parchment-dark)';
+      return '<div class="panel p-4 text-center">'+
+        '<div class="text-3xl mb-2">'+item.emoji+'</div>'+
+        '<p class="font-display text-xs mb-1" style="color:'+rarityColor+';">'+item.rarity.toUpperCase()+'</p>'+
+        '<p class="font-body text-sm font-semibold mb-1" style="color:var(--parchment);">'+item.name+'</p>'+
+        '<p class="font-body text-xs" style="color:var(--gold);">+'+item.bonus+' '+item.stat+'</p>'+
+      '</div>';
+    }).join('');
+  }
+  backdrop.classList.add('active');
+  overlay.classList.add('active');
+}
+window.openInventory = openInventory;
+
+function closeInventory(){
+  var backdrop = document.getElementById('inv-backdrop');
+  var overlay = document.getElementById('inv-overlay');
+  if(backdrop) backdrop.classList.remove('active');
+  if(overlay) overlay.classList.remove('active');
+}
+window.closeInventory = closeInventory;
+
+// ═══ SETTINGS ═══
+function openSettings(){
+  var sc = document.getElementById('settings-content');
+  if(sc){
+    sc.innerHTML = '<div class="flex flex-col gap-3">'+
+      '<button class="btn-secondary w-full text-left" onclick="exportSave()">📤 Export Save (JSON)</button>'+
+      '<button class="btn-secondary w-full text-left" onclick="document.getElementById(\'import-file-input\').click()">📥 Import Save (JSON)</button>'+
+      '<div style="border-top:1px solid rgba(212,160,23,0.2);margin:4px 0;"></div>'+
+      '<p class="font-body text-sm" style="color:var(--parchment-dark);">Hero: <strong style="color:var(--gold);">'+( state.heroName||'—')+'</strong></p>'+
+      '<p class="font-body text-sm" style="color:var(--parchment-dark);">Level: <strong style="color:var(--gold);">'+(state.level||1)+'</strong></p>'+
+      '<p class="font-body text-sm" style="color:var(--parchment-dark);">Dungeons Cleared: <strong style="color:var(--gold);">'+(state.dungeonsDone?state.dungeonsDone.length:0)+'</strong></p>'+
+      '<div style="border-top:1px solid rgba(212,160,23,0.2);margin:4px 0;"></div>'+
+      '<button class="btn-secondary w-full text-left" style="color:var(--blood);border-color:var(--blood);" onclick="showResetConfirm()">💀 Reset All Progress</button>'+
+    '</div>';
+  }
+  var sb = document.getElementById('settings-backdrop');
+  var so = document.getElementById('settings-overlay');
+  if(sb) sb.classList.add('open');
+  if(so) so.classList.add('open');
+}
+window.openSettings = openSettings;
+
+function closeSettings(){
+  var sb = document.getElementById('settings-backdrop');
+  var so = document.getElementById('settings-overlay');
+  if(sb) sb.classList.remove('open');
+  if(so) so.classList.remove('open');
+}
+window.closeSettings = closeSettings;
+
+function exportSave(){
+  var data = JSON.stringify(state, null, 2);
+  var blob = new Blob([data], {type:'application/json'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'aws-cloud-quest-save.json';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+  showToast('💾 Save exported successfully!');
+}
+window.exportSave = exportSave;
+
+function importSave(e){
+  var file = e.target.files[0];
+  if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    try {
+      var imported = JSON.parse(ev.target.result);
+      if(!imported.heroName) throw new Error('Invalid save file');
+      Object.assign(state, imported);
+      saveState();
+      showToast('✅ Save imported! Resuming your journey...');
+      setTimeout(function(){ location.reload(); }, 1500);
+    } catch(err){
+      showToast('❌ Invalid save file. Please try again.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function showResetConfirm(){
+  var sc = document.getElementById('settings-content');
+  if(!sc) return;
+  sc.innerHTML = '<div class="flex flex-col gap-3">'+
+    '<button class="btn-secondary w-full text-left" onclick="exportSave()">📤 Export Save (JSON)</button>'+
+    '<button class="btn-secondary w-full text-left" onclick="document.getElementById(\'import-file-input\').click()">📥 Import Save (JSON)</button>'+
+    '<div style="border-top:1px solid rgba(212,160,23,0.2);margin:4px 0;"></div>'+
+    '<p class="font-body text-sm" style="color:var(--parchment-dark);">Hero: <strong style="color:var(--gold);">'+(state.heroName||'—')+'</strong></p>'+
+    '<p class="font-body text-sm" style="color:var(--parchment-dark);">Level: <strong style="color:var(--gold);">'+(state.level||1)+'</strong></p>'+
+    '<p class="font-body text-sm" style="color:var(--parchment-dark);">Dungeons Cleared: <strong style="color:var(--gold);">'+(state.dungeonsDone?state.dungeonsDone.length:0)+'</strong></p>'+
+    '<div style="border-top:1px solid rgba(212,160,23,0.2);margin:4px 0;"></div>'+
+    '<div class="reset-confirm">'+
+      '<p>⚠️ This will permanently delete ALL progress, levels, and gear. This cannot be undone!</p>'+
+      '<div class="reset-confirm-btns">'+
+        '<button class="reset-yes" onclick="resetProgress()">💀 Yes, Reset Everything</button>'+
+        '<button class="reset-no" onclick="openSettings()">✕ Cancel</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+window.showResetConfirm = showResetConfirm;
+
+function resetProgress(){
+  localStorage.removeItem('awsQuestDungeonState');
+  state = { heroName: '', examId: null, classId: null, level: 1, xp: 0, stats: {}, inventory: [], dungeonsDone: [], questsDone: {}, questStates: {} };
+  closeSettings();
+  showToast('💀 Progress reset. The dungeon resets...');
+  setTimeout(function(){ location.reload(); }, 1500);
+}
+window.resetProgress = resetProgress;
+
+// ═══ INIT & WIRING ═══
+// Navigation buttons
+document.getElementById('btn-begin').addEventListener('click', beginJourney);
+document.getElementById('hero-name').addEventListener('keypress', function(e){
+  if(e.key === 'Enter') beginJourney();
+});
+document.getElementById('btn-back-tavern').addEventListener('click', function(){
+  showPage('page-intro');
+});
+document.getElementById('btn-back-exam').addEventListener('click', function(){
+  renderExamGrid(); showPage('page-exam');
+});
+document.getElementById('btn-back-map').addEventListener('click', function(){
+  renderMap(); showPage('page-map');
+});
+
+// Settings wiring — button is rendered dynamically in topbar, uses inline onclick
+var closeSettingsBtn = document.getElementById('btn-close-settings');
+if(closeSettingsBtn) closeSettingsBtn.addEventListener('click', closeSettings);
+var settingsBackdrop = document.getElementById('settings-backdrop');
+if(settingsBackdrop) settingsBackdrop.addEventListener('click', closeSettings);
+
+// Import file input wiring
+var importInput = document.getElementById('import-file-input');
+if(importInput) importInput.addEventListener('change', importSave);
+
+// Inventory wiring
+var shopBackdrop = document.getElementById('shop-backdrop');
+if(shopBackdrop) shopBackdrop.addEventListener('click', closeShop);
+var invBackdrop = document.getElementById('inv-backdrop');
+if(invBackdrop) invBackdrop.addEventListener('click', closeInventory);
+var closeInvBtn = document.getElementById('btn-close-inv');
+if(closeInvBtn) closeInvBtn.addEventListener('click', closeInventory);
+
+// Level-up page click-to-continue
+var levelupPage = document.getElementById('page-levelup');
+if(levelupPage) levelupPage.addEventListener('click', function(){
+  renderMap(); showPage('page-map');
+});
+// (Reset is handled entirely by resetProgress() above)
+// ═══ LOAD STATE & RESUME ═══
+loadState();
+if(state.heroName){
+  // Resume saved session
+  var heroNameEl = document.getElementById('hero-name');
+  if(heroNameEl) heroNameEl.value = state.heroName;
+  if(state.examId && state.classId){
+    renderMap();
+    showPage('page-map');
+  } else if(state.examId){
+    renderClassGrid();
+    showPage('page-class');
+  } else {
+    showPage('page-intro');
+  }
+} else {
+  showPage('page-intro');
+}
+
+} catch(e) {
+  console.error('AWS Quest Error:', e);
+  var ed = document.getElementById('error-display');
+  if(ed){
+    ed.style.cssText='position:fixed;top:0;left:0;width:100%;background:rgba(139,0,0,0.9);color:#f4e4b8;padding:12px 20px;font-family:monospace;font-size:14px;z-index:9999;';
+    ed.textContent='JS Error: '+e.message+' (check console for details)';
+  }
+}
+});

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+
+<!-- PWA core -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Cloud Quest" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#1a0e28" />
+<meta name="description" content="AWS Cloud Quest — Dungeon of Certifications" />
+<meta name="msapplication-TileColor" content="#1a0e28" />
+
+<link rel="apple-touch-icon" sizes="180x180" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='36' fill='%231a0e28'/%3E%3Ctext x='90' y='120' font-size='90' text-anchor='middle'%3E⚔️%3C/text%3E%3C/svg%3E" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231a0e28'/%3E%3Ctext x='16' y='24' font-size='20' text-anchor='middle'%3E⚔️%3C/text%3E%3C/svg%3E" />
+
+<title>AWS Cloud Quest — Dungeon of Certifications</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet" />
+
+<!-- Tailwind (must stay inline for config to work) -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      fontFamily: {
+        display: ['Cinzel', 'serif'],
+        body: ['Crimson Text', 'serif'],
+      },
+    },
+  },
+};
+</script>
+
+<!-- Game styles -->
+<link rel="stylesheet" href="style.css" />
+
+</head>
+<body>
+
+<!-- Particle Canvas -->
+<canvas id="particle-canvas"></canvas>
+<!-- Ambient Torch Glows -->
+<div class="torch-glow" style="width:300px;height:300px;top:-50px;left:-50px;animation-delay:0s;"></div>
+<div class="torch-glow" style="width:250px;height:250px;top:-30px;right:-30px;animation-delay:1.5s;"></div>
+<div class="torch-glow" style="width:200px;height:200px;bottom:10%;left:5%;animation-delay:2.8s;"></div>
+<!-- Music Toggle Button -->
+<button id="music-btn" class="muted" title="Toggle music (off)" onclick="toggleMusic()">🔇</button>
+<!-- Rank Up Overlay -->
+<div id="rankup-overlay">
+  <div class="rankup-card">
+    <div id="rankup-emoji" class="text-7xl mb-4" style="animation:pulse 1.5s infinite;">⭐</div>
+    <h2 class="font-display text-3xl mb-2" style="color:var(--gold-bright);text-shadow:0 0 30px rgba(245,200,66,0.5);">RANK UP!</h2>
+    <p id="rankup-title" class="font-display text-xl mb-1" style="color:var(--fire);"></p>
+    <p id="rankup-subtitle" class="font-body text-base italic mb-4" style="color:var(--parchment-dark);"></p>
+    <div id="rankup-perk" class="rankup-perk mb-4"></div>
+    <div id="rankup-bonus" class="flex flex-wrap gap-2 justify-center mb-5"></div>
+    <p class="font-body text-sm mb-5" style="color:var(--parchment-dark);">"The realm recognizes your growing mastery..."</p>
+    <button class="btn-primary" onclick="closeRankUp()">⚔️ Continue the Journey</button>
+  </div>
+</div>
+<app-icon data-id="1" hidden data-icon="sword" data-palette="Red"></app-icon>
+<div data-id="2" id="error-display"></div>
+
+<!-- iOS PWA Install Banner -->
+<div id="pwa-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9000;
+  background:linear-gradient(135deg,#1a0e28,#2d1810);border-top:2px solid rgba(212,160,23,0.6);
+  padding:14px 16px calc(14px + env(safe-area-inset-bottom));
+  box-shadow:0 -4px 20px rgba(0,0,0,0.5);font-family:'Crimson Text',serif;color:#f4e4b8;">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <span style="font-size:2rem;">&#x2694;&#xFE0F;</span>
+    <div style="flex:1;">
+      <div style="font-family:'Cinzel',serif;font-size:0.85rem;font-weight:700;color:#d4a017;letter-spacing:1px;">INSTALL CLOUD QUEST</div>
+      <div style="font-size:0.8rem;opacity:0.85;margin-top:2px;">Tap <strong>Share</strong> then <strong>"Add to Home Screen"</strong> to play offline</div>
+    </div>
+    <button onclick="document.getElementById('pwa-banner').style.display='none';localStorage.setItem('pwa-dismissed','1');"
+      style="background:none;border:1px solid rgba(212,160,23,0.4);border-radius:6px;color:#f4e4b8;padding:6px 10px;font-size:0.75rem;cursor:pointer;white-space:nowrap;min-height:unset;">
+      X Close
+    </button>
+  </div>
+</div>
+
+<div data-id="4" id="autosave-indicator">💾 Auto-saved</div>
+<div data-id="5" id="toast-container"><div data-id="6" class="toast-msg" id="toast-msg"></div></div>
+<div data-id="7" id="settings-backdrop"></div>
+<div data-id="8" id="settings-overlay">
+  <div data-id="9" class="flex items-center justify-between mb-4">
+    <h2 data-id="10" class="font-display text-lg" style="color:var(--gold);">📋 Adventurer's Registry</h2>
+  </div>
+  <div data-id="11" style="border-top:1px solid rgba(212,160,23,0.3);margin-bottom:16px;"></div>
+  <div data-id="12" id="settings-content"></div>
+  <button data-id="13" class="settings-btn" id="btn-close-settings" style="margin-top:8px;text-align:center;color:var(--fire);">✕ Close Registry</button>
+</div>
+<input data-id="14" type="file" id="import-file-input" accept=".json" style="display:none;" />
+
+<!-- PAGE 1: TAVERN INTRO -->
+<div data-id="15" id="page-intro" class="page active">
+  <div data-id="16" class="flex flex-col items-center justify-center min-h-screen px-4 py-8 w-full">
+    <div data-id="17" class="flex items-center gap-6 mb-4 hero-entrance hero-entrance-d1">
+      <span data-id="18" class="text-4xl torch-flicker">🔥</span>
+      <span data-id="19" class="text-4xl torch-flicker" style="animation-delay:0.3s">🔥</span>
+    </div>
+    <h1 data-id="20" class="font-display text-4xl md:text-6xl font-black text-center mb-2 hero-entrance hero-entrance-d2" style="color:var(--gold);text-shadow:0 0 30px rgba(212,160,23,0.4);">⚔️ AWS Cloud Quest</h1>
+    <p data-id="21" class="font-body text-xl md:text-2xl italic text-center mb-3 hero-entrance hero-entrance-d2" style="color:var(--parchment);">Dungeon of Certifications</p>
+    <div data-id="22" class="text-center mb-6 hero-entrance hero-entrance-d3" style="color:var(--gold);letter-spacing:6px;">═══════════════</div>
+    <p data-id="23" class="font-body italic text-center max-w-lg mb-8 text-sm md:text-base hero-entrance hero-entrance-d3" style="color:var(--parchment-dark);">
+      "Brave adventurer, the Cloud Realm awaits. Many have sought the Sacred Certificates of AWS — few have returned victorious. Will you be the one to conquer all twelve dungeons?"
+    </p>
+    <div data-id="24" class="panel p-6 md:p-8 flex flex-col items-center gap-4 w-full max-w-md hero-entrance hero-entrance-d4">
+      <label data-id="25" class="font-display text-sm" style="color:var(--gold);letter-spacing:2px;">Speak Your Name, Adventurer:</label>
+      <input data-id="26" id="hero-name" type="text" class="quest-input" style="font-size:16px;" placeholder="Enter thy hero name..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+      <button data-id="27" id="btn-begin" class="btn-primary mt-2" onclick="beginJourney()">🗡️ Enter the Tavern →</button>
+    </div>
+    <p data-id="28" class="font-body text-xs mt-8 hero-entrance hero-entrance-d4" style="color:var(--parchment-dark);opacity:0.6;">The Dungeon Master's Edition v13 • All 12 AWS Certifications • Enhanced CloudOps Pathway</p>
+  </div>
+</div>
+
+<!-- PAGE 2: EXAM SELECT -->
+<div data-id="29" id="page-exam" class="page">
+  <div data-id="30" class="w-full min-h-screen flex flex-col">
+    <div data-id="31" class="flex items-center justify-between px-4 md:px-8 py-3 panel" style="border-radius:0;border-left:none;border-right:none;border-top:none;">
+      <span data-id="32" class="font-display text-sm" style="color:var(--gold);">⚔️ AWS Cloud Quest</span>
+      <span data-id="33" class="font-body text-sm" style="color:var(--parchment);" id="exam-hero-name"></span>
+    </div>
+    <div data-id="34" class="flex-1 px-4 md:px-8 py-6 overflow-y-auto">
+      <button data-id="35" id="btn-back-tavern" class="btn-secondary mb-4">← Return to Tavern</button>
+      <h2 data-id="36" class="font-display text-2xl md:text-3xl text-center mb-1" style="color:var(--gold);">📜 Choose Your Sacred Scroll</h2>
+      <p data-id="37" class="font-body text-center mb-6" style="color:var(--parchment-dark);">Each scroll is a dungeon path. Choose wisely — your journey begins here.</p>
+      <div data-id="38" id="exam-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl mx-auto"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 3: CLASS SELECT -->
+<div data-id="39" id="page-class" class="page">
+  <div data-id="40" class="w-full min-h-screen flex flex-col items-center">
+    <div data-id="41" class="w-full px-4 md:px-8 py-6 overflow-y-auto flex flex-col items-center">
+      <button data-id="42" id="btn-back-exam" class="btn-secondary self-start mb-4">← Choose Different Scroll</button>
+      <h2 data-id="43" class="font-display text-2xl md:text-3xl text-center mb-1" style="color:var(--gold);">⚗️ Choose Thy Class</h2>
+      <p data-id="44" class="font-body text-center mb-4" style="color:var(--parchment-dark);">Your class determines your strengths on the path ahead.</p>
+      <div data-id="45" id="class-exam-banner" class="panel px-6 py-3 mb-6 text-center font-display text-sm" style="color:var(--gold);"></div>
+      <div data-id="46" id="class-grid" class="flex flex-wrap gap-4 w-full max-w-6xl pb-4 px-2 justify-center"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 4: OVERWORLD MAP -->
+<div data-id="47" id="page-map" class="page">
+  <div data-id="48" class="w-full min-h-screen flex flex-col">
+    <div data-id="49" id="map-topbar" class="flex items-center justify-between px-4 md:px-6 py-3 panel" style="border-radius:0;border-left:none;border-right:none;border-top:none;flex-shrink:0;"></div>
+    <div data-id="50" class="flex-1 flex map-layout px-4 md:px-6 py-4 gap-4 overflow-y-auto">
+      <div data-id="51" class="map-left" style="width:30%;min-width:240px;" id="char-sheet"></div>
+      <div data-id="52" class="map-right flex-1" id="dungeon-map"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 5: QUEST SCROLL -->
+<div data-id="53" id="page-quests" class="page">
+  <div data-id="54" class="w-full min-h-screen flex flex-col">
+    <div data-id="55" class="px-4 md:px-6 py-3 panel flex items-center gap-4" style="border-radius:0;border-left:none;border-right:none;border-top:none;flex-shrink:0;">
+      <button data-id="56" id="btn-back-map" class="btn-secondary">← Return to Map</button>
+      <span data-id="57" id="quest-dungeon-title" class="font-display text-lg" style="color:var(--gold);"></span>
+    </div>
+    <div data-id="58" class="flex-1 flex quest-layout px-4 md:px-6 py-4 gap-4 overflow-y-auto">
+      <div data-id="59" class="quest-left" style="width:65%;" id="quest-log"></div>
+      <div data-id="60" class="quest-right" style="width:35%;" id="dungeon-info"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 6: BOSS ENCOUNTER -->
+<div data-id="61" id="page-boss" class="page">
+  <div data-id="62" class="w-full min-h-screen flex flex-col items-center justify-center px-4 py-8" id="boss-content"></div>
+</div>
+
+<!-- PAGE 7: LEVEL UP -->
+<div data-id="63" id="page-levelup" class="page" style="z-index:150;">
+  <div data-id="64" class="w-full min-h-screen flex flex-col items-center justify-center px-4">
+    <div data-id="65" class="level-flash text-center">
+      <p data-id="66" class="text-6xl md:text-8xl mb-4">✨</p>
+      <h1 data-id="67" class="font-display text-4xl md:text-6xl font-black mb-4" style="color:var(--gold-bright);text-shadow:0 0 40px rgba(245,200,66,0.5);" id="levelup-title">LEVEL UP!</h1>
+      <p data-id="68" class="font-body text-xl" style="color:var(--parchment);" id="levelup-text"></p>
+      <p data-id="69" class="font-body text-lg mt-2" style="color:var(--fire);" id="levelup-gear"></p>
+      <p data-id="70" id="levelup-rank" class="font-display text-lg mt-3" style="color:var(--gold-bright);display:none;"></p>
+      <p data-id="71" class="font-body text-sm mt-6" style="color:var(--parchment-dark);">Click anywhere to continue...</p>
+    </div>
+  </div>
+</div>
+
+<!-- INVENTORY OVERLAY -->
+<div data-id="72" id="inv-backdrop" class="overlay-backdrop"></div>
+<div data-id="73" id="inv-overlay" class="overlay">
+  <div data-id="74" class="flex items-center justify-between mb-6">
+    <h2 data-id="75" class="font-display text-xl" style="color:var(--gold);">🎒 Adventurer's Satchel</h2>
+    <button data-id="76" id="btn-close-inv" class="btn-secondary">✕ Close</button>
+  </div>
+  <div data-id="77" id="inv-grid" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div>
+</div>
+
+<div id="shop-backdrop" class="overlay-backdrop"></div>
+<div id="shop-overlay" class="overlay" style="max-width:460px;">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="font-display text-xl" style="color:var(--gold);">🏪 Arcane Scroll Shop</h2>
+    <button onclick="closeShop()" style="background:rgba(26,18,9,0.7);border:1px solid rgba(212,160,23,0.4);color:var(--gold);width:36px;height:36px;border-radius:8px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;">✕</button>
+  </div>
+  <div id="shop-content"></div>
+  <div class="mt-4 panel p-3" style="border-color:rgba(200,80,10,0.4);">
+    <p class="font-display text-xs mb-1" style="color:var(--fire);">🔥 HOW TO USE FIREBOLT</p>
+    <p class="font-body text-xs" style="color:var(--parchment-dark);">During any trial or boss question, tap the <strong style="color:var(--gold-bright);">🔥 Firebolt</strong> button that appears below the question. Earn gold (💰) by completing quests — 1 gold per 3 XP!</p>
+  </div>
+</div>
+
+<!-- QUEST TRIAL OVERLAY -->
+<div data-id="78" id="quest-trial-overlay">
+  <button data-id="79" class="trial-close-btn" id="trial-close-btn">✕</button>
+  <div data-id="80" id="quest-trial-content" style="max-width:700px;width:90%;padding:2rem;"></div>
+</div>
+
+<!-- Game scripts -->
+<script src="game.js"></script>
+
+</body>
+</html>
